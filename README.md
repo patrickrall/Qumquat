@@ -1,4 +1,5 @@
-# Qumquat - Quantum Machine Learning and Quantum Algorithms Toolkit
+# Qumquat
+## Quantum Machine Learning and Quantum Algorithms Toolkit
 
 Qumquat is an experimental high-level quantum programming language. This language is aimed to provide a comfortable environment for experimenting with algorithms like HHL, quantum semidefinite programming, quantum counting, quantum reccomendation systems and quantum convex optimization.  Guiding ideas:
 
@@ -49,7 +50,7 @@ x,y = qq.reg(10, range(3))
 x += 3
 
 x.clean(13) # register x is now deallocated
-# x += 1 # raises SyntaxError
+x += 1 # raises SyntaxError
 
 z = qq.reg(y)
 
@@ -66,13 +67,13 @@ Operations `+=, -=, *=, //=, **=, ^=, <<=` are permitted whenever they are rever
 x = qq.reg(3)
 
 x *= 2    # now x is 6
-# x *= 0  # raises IrrevError
+x *= 0  # raises IrrevError
 x //= 2   # reversible since x is a multiple of 2. x is now 3.
-# x // 2  # raises IrrevError now that x is no longer a multiple of 2
+x // 2  # raises IrrevError now that x is no longer a multiple of 2
 
 x **= 2     # now x is 9
-# x **= 0   # raises IrrevError
-# x **= -1  # raises IrrevError (x would have to be a float)
+x **= 0   # raises IrrevError
+x **= -1  # raises IrrevError (x would have to be a float)
 
 x ^= 8   # now x is 1
 x <<= 1  # now x is 2
@@ -163,7 +164,7 @@ qq.phase_2pi(x)
  
 #### Low level bitwise operations
 
-Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permit access to bits: `x[-1]` is the sign bit and `x[i]` is the 2^i digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
+Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permit access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
 
 ```python
 x = qq.reg(-10)
@@ -197,7 +198,7 @@ x.cnot(0,1)
 y = qq.reg([0,3])
 ```
 
-Qumquat actually implements a custom class `es_int` - explicitly signed int - for the registers. `es_int` quacks like a regular python int, but +0 and -0 are different numbers, i.e `es_int(0) == -es_int(0)` evaluates to `False`. This is necessary because it should be possible to hadamard the sign bit regardless of the value of the rest of the register. However, this is just a technicality. The user should never have to care, especially since `qq.measure` casts to a float.
+Qumquat actually implements a custom class `es_int` - explicitly signed int - for the registers. `es_int` quacks like a regular python int, but `+0` and `-0` are different numbers, i.e `es_int(0) == -es_int(0)` evaluates to `False`. This is necessary because it should be possible to hadamard the sign bit regardless of the value of the rest of the register. However, this is just a technicality. The user should never have to care, especially since `qq.measure` casts to a float.
 
 
 ### Reversible programming
@@ -223,7 +224,7 @@ qq.print(x,y)
 # 1.0 0.0 w.p. 0.33333
 # 2.0 2.0 w.p. 0.33333
 
-# with qq.q_if(x > 1): x -= 1  # raises SyntaxError
+with qq.q_if(x > 1): x -= 1  # raises SyntaxError
 
 # Z gate on index 1
 if qq.q_if(x[1]): qq.phase_pi(1)
@@ -287,13 +288,12 @@ with qq.inv():
 qq.print(x)
 # -3.0 w.p. 1.0
 
-# with qq.inv():
-#     z = qq.reg(2)
+with qq.inv(): z = qq.reg(2)
 # raises SyntaxError -> attempted to read register that was never allocated.
-# z = qq.reg(2) is inverted to z.clean(2), but z is unallocated.
+z = qq.reg(2) is inverted to z.clean(2), but z is unallocated.
 ```
 
-So how does one uncompute garbage? This situation is unsatisfying because it encourages you to factor out your garbage registers as shown below. The quantum garbage collector makes this unnecessary.
+So how does one uncompute garbage? This situation is unsatisfying because it encourages you to factor out your garbage registers as shown below. The quantum garbage collector makes this easier.
 
 ```python
 def do_thing(x, tmp):
@@ -323,7 +323,7 @@ Quantum while `qq.q_while(cond, tmp)` loops demand not only a loop condition `co
 On a real quantum computer a while loop is only possible if an upper bound on the number of iterations is known - how else would you generate the quantum circuit? Qumquat's simulator saves you this inconvenience by introspecting the superposition and stopping the loop when all branches are done.
 
 ```python
-x, y = qq.reg([2,3,4], 0)
+x, y = qq.reg([2,3,4,5], 0)
 i, tmp = qq.reg(0,0)
 
 # goal:
@@ -333,27 +333,31 @@ with qq.q_while(i < x, tmp):
     y += i**2
     i += 1
 
-qq.print(x,y,i,tmp)
-# 2.0 1.0 2.0 2.0 w.p. 0.25
-# 3.0 5.0 3.0 3.0 w.p. 0.25
-# 4.0 14.0 4.0 4.0 w.p. 0.25
-# 5.0 30.0 5.0 5.0 w.p. 0.25
-
 # since x = i = tmp we can uncompute i and tmp
 i.clean(x)
 tmp.clean(x)
+
+qq.print(x,y,i,tmp)
+# 2.0 1.0 w.p. 0.25
+# 3.0 5.0 w.p. 0.25
+# 4.0 14.0 w.p. 0.25
+# 5.0 30.0 w.p. 0.25
 ```
 
-Since for loops are just while loops in disguise, let's implement a for loop. Python's `with` statement calls the `__enter__` and `__exit__` methods before and after the code block respectively.
+Since for loops are just while loops in disguise, let's implement a for loop. Python's `with` statement calls the `__enter__` and `__exit__` methods before and after the code block respectively. Since it is possible to predict the number of loops from the initial conditions we can immediately uncompute the temporary register and return the loop variable to its initial value.
 
 ```python
-
 class q_for():
     def __init__(self, i, maxval):
         self.i = i
-        self.tmp = qq.reg(0) # temporary register
-        self.i_start = qq.reg(i) # copy the initial value
         self.maxval = maxval
+
+        # compute the number of iterations
+        self.num_iter = qq.reg(0)
+        with qq.q_if(i < maxval):
+            self.num_iter += maxval - i
+
+        self.tmp = qq.reg(0) # temporary register
         self.q_while = qq.q_while(i < maxval, self.tmp)
 
     def __enter__(self):
@@ -364,26 +368,190 @@ class q_for():
         self.q_while.__exit__()
 
         # clean the temporary register
-        self.tmp.clean(self.i - self.i_start)
+        self.tmp.clean(self.num_iter)
 
-        self.i -= self.maxval      # empty the i register
-        self.i += self.i_start     # fill with i_start
-        self.i_start.clean(self.i) # clean i_start
+        # return i to previous value
+        self.i -= self.num_iter
+
+        # uncompute the number of iterations
+        with qq.q_if(self.i < self.maxval):
+            self.num_iter -= self.maxval - self.i
+        self.num_iter.clean(0)
 
 
-
-x = qq.reg([3,4,5])
+x = qq.reg([2,3,4,5])
 out = qq.reg(0)
 
 i = qq.reg(3)
 with q_for(i, x):
     out += i**2
+i.clean(3) # i is returned to initial value
 
-qq.print(x,out,i)
-# 3.0 0.0 3.0 w.p. 0.33333
-# 4.0 9.0 3.0 w.p. 0.33333
-# 5.0 25.0 3.0 w.p. 0.33333
+qq.print(x,out)
+# 2.0 0.0 w.p. 0.25
+# 3.0 0.0 w.p. 0.25
+# 4.0 9.0 w.p. 0.25
+# 5.0 25.0 w.p. 0.25
 ```
+
+Is returning the loop variable to its initial value always the best choice? What if you want to loop in reverse order, or change the step size? Implementing a more general for loop would be complicated and it would be confusing to use. This is why Qumquat just implements the while loop - the user can decide what makes sense from context.
+
 
 ### Quantum Garbage Collection
 
+Reversible computation is a bit annoying - you have to follow annoying rules to ensure reversiblity, and whenever you use temporary registers you have to worry about cleaning them up. This can be tricky as the for loop example shows. 
+
+Ideally, you should be able to declare as many temporary registers as you want without worry and write irreversible code, and have uncomputing still work. The quantum garbage collector mostly enables this.
+
+As shown above `qq.inv()` on its own is not smart enough to uncompute allocations. The following code will not behave as expected:
+```python
+x = qq.reg(2)
+with qq.inv(): x = qq.reg(2)  # this does not uncompute the previous line
+```
+In fact the above code crashes. But with `qq.garbage()` it works:
+```python
+with qq.garbage():
+    x = qq.reg(2)
+    with qq.inv(): x = qq.reg(2)  # uncomputes the previous line
+```
+
+#### How it works
+
+`qq.reg` is a bit subtle. Consider the following piece of code:
+```python
+i = qq.reg(0)
+with qq.q_while(i < 3, qq.reg(0)):
+    x = qq.reg(i)
+    i += 1
+```
+The while loop executes three times, but python only executes the contents of a `with` environment once, so `qq.reg` is actually only once. Despite this, three registers are allocated, so `x` refers to multiple registers!
+
+This illustrates that `qq.reg` does not actually return a register. It returns a `Key` - a more complicated object that maintains references to registers. Sometimes keys can refer to multiple registers as above.
+
+In order to perform garbage collection we also need the opposite: multiple keys refer to the same register. Even though the uncompute operation creates new `Key` objects, they refer to registers that were allocated previously. When garbage collection is turned on, `Key` objects will automatically organize themselves into pairs.
+
+```python
+with qq.garbage():
+    x = qq.reg(1) # key 0
+    y = qq.reg(2) # key 1
+    with qq.inv(): 
+        qq.reg(1) # key 2, paired to key 1
+        qq.reg(2) # key 4, paired to key 1
+````
+
+The ordering of the keys determines the pair matching, so be careful. The following code might make sense, but the `Key` are not smart enough to pair themselves correctly.
+
+```python
+with qq.garbage():
+    x = qq.reg(1) # key 0
+    y = qq.reg(2) # key 1
+    with qq.inv(): qq.reg(2) # key 2, paired to 1. Uncompute fails -> crash
+    with qq.inv(): qq.reg(1)
+````
+
+If a key refers to multiple registers, as it did in the first example, the partner key must also refer to multiple registers.
+
+```python
+i = qq.reg(0)    # key 0, not garbage collected
+tmp = qq.reg(0)  # key 1, not garbage collected
+
+with qq.garbage():
+
+    with qq.q_while(i < 3, tmp):
+        x = qq.reg(i) # key 2, allocated 3 times
+        i += 1
+
+    with qq.inv():
+        with qq.q_while(i < 3, tmp):
+            x = qq.reg(i) # key 3, paired to key 2, deallocated 3 times
+            i += 1
+            
+i.clean(0)
+tmp.clean(0)
+```
+
+#### Garbage piles
+
+`qq.garbage` can be used in multiple ways. If you call `qq.garbage()` then the collector insists that everything is cleaned up within the same scope.
+
+```python
+with qq.garbage():
+    x = qq.reg(2)
+    # crashes at end of scope! Not all keys were cleaned up!
+    
+with qq.garbage():
+    with qq.inv(): x = qq.reg(2)
+```
+
+But you can also put your keys into a 'garbage pile' and clean them up later. Do this with `qq.garbage('pile name')`:
+
+```python
+with qq.garbage('demo'):
+    x = qq.reg(2)  # key 0
+
+# garbage pile 'demo' now contains key 0
+    
+with qq.garbage('demo'):
+    with qq.inv(): x = qq.reg(2) # key 1, matched to key 0
+    
+# If you really want to be careful with your garbage:
+qq.assert_pile_clean('demo')
+```
+
+This is especially useful for calling subroutines. so you can use `qq.garbage` as a decorator. For example:
+
+```python
+@qq.garbage('subroutine')
+def messy_function(x):
+    i, out = qq.reg(0,2)
+    with qq.q_while(i < x, qq.reg(0)):
+        tmp = qq.reg(i % out)
+        out += tmp
+        i += 1
+
+    return out
+
+input = qq.reg([1,2,3,4,5])
+output = qq.reg(messy_function(input))
+with qq.inv(): messy_function(input)
+
+qq.print(input, output)
+
+qq.assert_pile_clean('subroutine')
+# 1.0 2.0 w.p. 0.2
+# 2.0 3.0 w.p. 0.2
+# 3.0 5.0 w.p. 0.2
+# 4.0 8.0 w.p. 0.2
+# 5.0 12.0 w.p. 0.2
+
+qq.assert_pile_clean('subroutine')
+```
+
+The above subroutine allocates variables left and right without a care in the world, and it is all cleaned up automatically.
+
+#### Irreversible operations
+
+Now that making temporary variables is no longer cumbersome, we can use irreversible statements like `x.assign`. We can also break rule 1: the statements can now depend to their target, e.g. `x.assign(x+1)`.
+```python
+@qq.garbage('irrev_demo')
+def irrev_demo(x):
+    x.assign(x + 1)
+    x[0] = 1 # set first bit
+    x %= 10
+    x >>= 1
+    x &= x
+    x |= x+1
+    return x
+
+input = qq.reg(range(4,8))
+output = qq.reg(irrev_demo(input))
+with qq.inv(): irrev_demo(input)
+
+qq.print(input, output)
+# 4.0 3.0 w.p. 0.25
+# 5.0 7.0 w.p. 0.25
+# 6.0 7.0 w.p. 0.25
+# 7.0 5.0 w.p. 0.25
+```
+
+Normally reversible statements `+=, -=, *=, //=, **=, ^=, <<=` still insist on reversiblity, so `x += x + 1` and `x *= qq.reg([0,1])` will still crash. If you want to protect against irreversiblity for these statements, just use `x.assign` like `x.assign(x + x + 1)` or `x.assign(x*qq.reg([0,1]))`.
