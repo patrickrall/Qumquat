@@ -47,6 +47,38 @@ class Qumquat(object):
     garbage_stack = []
 
 
+    ############################ Clear and prune
+
+    # delete all variables and start anew
+    def clear(self):
+        if len(self.controls) > 0 or len(self.queue_stack) > 0 or\
+                len(self.garbage_stack) > 0 or len(self.mode_stack) > 0:
+            raise SyntaxError("Cannot clear inside quantum control flow.")
+
+        self.key_dict = {}
+
+        self.pile_stack = []
+        self.garbage_piles = {"keyless": []}
+        self.garbage_stack = []
+        self.branches = [{"amp": 1+0j}]
+
+    # get rid of branches with tiny amplitude
+    def prune(self):
+        newbranches = []
+        norm = 0
+        thresh = 1e-10
+
+        for branch in self.branches:
+            if abs(branch["amp"]) > thresh:
+                newbranches.append(branch)
+                norm += abs(branch["amp"])**2
+        norm = cmath.sqrt(norm)
+
+        self.branches = newbranches
+        for branch in self.branches:
+            branch["amp"] /= norm
+
+
     ############################ Alloc and dealloc
 
     def alloc(self, key):
@@ -404,9 +436,8 @@ class Qumquat(object):
         if self.queue_action('print_amp_inv', *exprs): return
         self.print_amp(*exprs)
 
-    ######################################## Primitive operations
+    ######################################## Hadamard
 
-    # Todo: O(n) implementation possible?
     def had(self, key, bit):
         if self.queue_action('had', key, bit): return
         self.assert_mutable(key)
@@ -420,46 +451,100 @@ class Qumquat(object):
             return True
 
         newbranches = []
-        def insert(oldbranch, trans, mult):
-            oldbranch = copy.copy(oldbranch)
-            oldbranch[key.index()] = trans(oldbranch[key.index()])
+        def insert(branch):
 
-            for branch in newbranches:
-                if branchesEqual(branch, oldbranch):
-                    branch["amp"] += oldbranch["amp"]*mult/math.sqrt(2)
+            for existingbranch in newbranches:
+                if branchesEqual(branch, existingbranch):
+                    existingbranch["amp"] += branch["amp"]
                     return
+            newbranches.append(branch)
 
-            newbranches.append(oldbranch)
-            newbranches[-1]["amp"] *= mult/math.sqrt(2)
-
-
-        for branch in self.controlled_branches():
-            idx = bit.c(branch)
-
-            if idx == -1: # -1 is sign bit
-                insert(branch, lambda x: x, 1)
-                insert(branch, lambda x: -x, -branch[key.index()].sign)
-            else:
-                if abs(int(branch[key.index()])) & (1 << idx) == 0:
-                    insert(branch, lambda x: x, 1)
-                    insert(branch, lambda x: es_int(x.sign)*(abs(x) + 2**idx), 1)
-                else:
-                    insert(branch, lambda x: es_int(x.sign)*(abs(x) - 2**idx), 1)
-                    insert(branch, lambda x: x, -1)
-
-        self.branches = []
-
-        norm = 0
-        for branch in newbranches:
-            if abs(branch["amp"]) > 1e-10:
-                self.branches.append(branch)
-                norm += abs(branch["amp"])**2
-
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
         for branch in self.branches:
-            branch["amp"] /= math.sqrt(norm)
+            if not goodbranch(branch):
+                insert(branch)
+            else:
+                idx = bit.c(branch)
+                newbranch1 = copy.deepcopy(branch)
+                newbranch1["amp"] /= math.sqrt(2)
+                newbranch1[key.index()] = es_int(branch[key.index()])
+                newbranch1[key.index()][idx] = 0
+
+                newbranch2 = copy.deepcopy(branch)
+                newbranch2["amp"] /= math.sqrt(2)
+                newbranch2[key.index()] = es_int(branch[key.index()])
+                newbranch2[key.index()][idx] = 1
+
+                if branch[key.index()][idx] == 1:
+                    newbranch2["amp"] *= -1
+
+                insert(newbranch1)
+                insert(newbranch2)
+
+        self.branches = newbranches
+        self.prune()
+
 
     def had_inv(self, key, bit):
         self.had(key, bit)
+
+
+    ######################################## QFT
+
+    def qft(self, key, d, inverse=False):
+        if self.queue_action('qft', key, d, inverse): return
+        self.assert_mutable(key)
+        d = Expression(d, self)
+        if key.key in d.keys:
+            raise SyntaxError("Can't modify target based on expression that depends on target.")
+
+        def branchesEqual(b1, b2):
+            for key in b1.keys():
+                if key == "amp": continue
+                if b1[key] != b2[key]: return False
+            return True
+
+        newbranches = []
+        def insert(branch):
+            for existingbranch in newbranches:
+                if branchesEqual(branch, existingbranch):
+                    existingbranch["amp"] += branch["amp"]
+                    return
+            newbranches.append(branch)
+
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        for branch in self.branches:
+            if not goodbranch(branch):
+                insert(branch)
+            else:
+                dval = d.c(branch)
+                if dval != int(dval) or int(dval) <= 1:
+                    raise ValueError("QFT must be over a positive integer")
+                base = branch[key.index()] - (branch[key.index()] % dval)
+                for i in range(int(dval)):
+                    newbranch = copy.deepcopy(branch)
+                    newbranch['amp'] *= 1/math.sqrt(dval)
+
+                    if inverse:
+                        newbranch['amp'] *= cmath.exp(-int(branch[key.index()])*i\
+                                *2j*math.pi/int(dval))
+                    else:
+                        newbranch['amp'] *= cmath.exp(int(branch[key.index()])*i\
+                                *2j*math.pi/int(dval))
+
+                    newbranch[key.index()] = es_int(i + base)
+                    newbranch[key.index()].sign = branch[key.index()].sign
+                    insert(newbranch)
+
+
+        self.branches = newbranches
+        self.prune()
+
+    def qft_inv(self, key, d, inverse=False):
+        self.qft(key, d, inverse=(not inverse))
+
+
+    ######################################## Primitives
 
     # for things like +=, *=, etc
     def oper(self, key, expr, do, undo):

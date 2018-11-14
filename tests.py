@@ -1,5 +1,6 @@
 import qumquat as qq
 from qvars import es_int
+import matplotlib.pyplot as plt
 import math
 
 
@@ -150,22 +151,6 @@ def test_collatz():
 
     qq.print(y,l)
 
-def qft(x,n):
-    for i in range(n)[::-1]:
-        x.had(i)
-        with qq.q_if(x[i]):
-            omega((x % 2**i)*2**(n-i-1),n)
-
-    # reverse order
-    for i in range(n//2):
-        x.cnot(i,n-i-1)
-        x.cnot(n-i-1,i)
-        x.cnot(i,n-i-1)
-
-def omega(x, n):
-    qq.phase_2pi(x/(2**n))
-
-
 def test_order():
     print("order")
     n = 5
@@ -173,9 +158,8 @@ def test_order():
 
     qq.reg((7**x).int() % 15) # has period 4
 
-    with qq.inv(): qft(x,n)
+    with qq.inv(): x.qft(2**n)
 
-    import matplotlib.pyplot as plt
     vals, probs, _ = qq.distribution(x)
     plt.plot(vals,probs)
     plt.show()
@@ -281,8 +265,6 @@ def test_garbage_5():
     i.clean(0)
     tmp.clean(0)
 
-
-
 # grover's search on max clique
 def grover():
     print("grover")
@@ -315,7 +297,6 @@ def grover():
 
     x = qq.reg(range(2**n))
 
-    import matplotlib.pyplot as plt
 
     for i in range(1):
         with qq.q_if(oracle(x)): qq.phase_pi(1)
@@ -397,8 +378,18 @@ def test_for():
 
     qq.print(x,out)
 
+def test_qft():
+    print("qft")
+    for i in range(-10,10,3):
+        qq.clear()
 
-if False:
+        print(i)
+        x = qq.reg(i)
+        x.qft(4)
+        qq.print(x)
+
+
+if True:
     test_init()
     test_inv()
     test_if()
@@ -415,4 +406,5 @@ if False:
     # grover() # has plot
     test_repeated_square()
     test_for()
+    test_qft()
 

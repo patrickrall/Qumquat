@@ -371,6 +371,9 @@ class Key():
 
     ######################### Shortcuts
 
+    def qft(self, d):
+        self.qq.qft(self, d)
+
     def had(self, idx):
         self.qq.had(self, idx)
 
@@ -379,6 +382,7 @@ class Key():
 
     def clean(self, expr):
         self.qq.clean(self, expr)
+
 
 ###################################################################
 

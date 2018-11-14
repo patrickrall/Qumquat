@@ -11,7 +11,7 @@ Qumquat is a side project that took 1.5 weeks to speed-code. So the documentatio
 
 ### Quantum Registers
 
-Quantum registers are created with `qq.reg`. *Qumquat registers are always signed integers*.
+Quantum registers are created with `qq.reg`. **Qumquat registers are always signed integers**.
 
 The probability distribution of a register can be displayed with `qq.print`.
 
@@ -37,7 +37,7 @@ qq.print_amp(x,y)
 # 10.0 2.0 w.a. 0.57735
 
 # Watch out for lists with repeated entries:
-# z = qq.reg([1,1]) # will raise ValueError
+z = qq.reg([1,1]) # will raise ValueError
 
 # You can also copy another register
 w = qq.reg(y)
@@ -60,7 +60,7 @@ y.clean(z)
 z.clean(range(3)) 
 ```
 
-Operations `+=, -=, *=, //=, **=, ^=, <<=` are permitted whenever they are reversible. Irreversible operations exist as well, but they require the garbage collector.
+Operations `+=`, `-=`, `*=`, `//=`, `**=`, `^=`, `<<=` are permitted whenever they are reversible. Irreversible operations exist as well, but they require the garbage collector.
 
 ```python
 
@@ -104,9 +104,14 @@ qq.print(x,x / 2)
 x = x+1
 # Now x is an Expression, not a register.
 # You now longer have a reference to the register x used to refer to.
-# This bug is nasty since it can be hard to spot. Most qumquat functions
-# support running on expressions. One exception is cnot.
+# This bug is nasty since it can be hard to spot - operations like +=
+# are still defined on expressions. Here are some functions that now fail:
+x.qft(3) # raises AttributeError
+x.had(0) # raises AttributeError
 x.cnot(0,1) # raises AttributeError
+x.assign(1) # raises AttributeError
+x.clean(0) # raises AttributeError
+
 ```
 If a successor of this language were to compile to a real quantum computer, it would allocate extra qubits to temporarily hold on to the value of the expression. These qubits would then be immediately uncomputed automatically.
 
@@ -118,7 +123,7 @@ The function `qq.measure` samples a random value from the output distribution an
 x = qq.reg([-1,1,-2,2])
 
 out = qq.measure(x**2)
-# outputs 1 or 2
+# outputs 1.0 or 4.0
 
 qq.print(x)
 # outputs either:
@@ -161,7 +166,57 @@ qq.phase(2*pi*x)
 qq.phase_pi(2*x)
 qq.phase_2pi(x)
 ```
- 
+
+#### Quantum Fourier Transform
+
+You can apply a QFT to a register `x` with `x.qft(d)`. Let `x = k*d + r`, where `r = x%d`. Then the QFT takes `|x>` to ` d^(-1/2)  sum_y e^(r * y * 2*pi*i/d) |k*d + y>`, where the sum is from `0` to `d-1`. It leaves the `k*d` part intact and only transforms `r`. 
+```python
+x,y,z = qq.reg(-2, 1, 6)
+
+x.qft(4)
+y.qft(4)
+z.qft(4)
+
+qq.print(x)
+-4.0 w.p. 0.25
+-3.0 w.p. 0.25
+-2.0 w.p. 0.25
+-1.0 w.p. 0.25
+
+qq.print(y)
+0.0 w.p. 0.25
+1.0 w.p. 0.25
+2.0 w.p. 0.25
+3.0 w.p. 0.25
+
+qq.print(z)
+4.0 w.p. 0.25
+5.0 w.p. 0.25
+6.0 w.p. 0.25
+7.0 w.p. 0.25
+```
+
+#### Clear
+
+If your are done with all of the registers and don't want to go through the trouble of cleaning them up, you can clear the state of Qumquat with `qq.clear()`. This strongly improves performance.
+
+```python
+# this gets super slow for later operations
+# as the number of branches increases exponentially
+for i in range(3,10):
+    x = qq.reg(i)
+    x.qft(5)
+    qq.print(x)
+
+# this is fast
+for i in range(3,10):
+    qq.clear()
+    x = qq.reg(i)
+    x.qft(5)
+    qq.print(x)
+```
+
+
 #### Low level bitwise operations
 
 Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permit access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
@@ -173,7 +228,7 @@ qq.print(*[x[i] for i in range(-1,4)])
 # sgn 2^0 2^1 2^2 2^3 
 ```
 
-Hadamard and CNOT can be perfomed via `x.had(i)` and `x.cnot(ctrl, targ)`.  Qumquat is a high level language - you should not find the need to use Hadamard and CNOT unless you are doing nitty-gritty stuff like implementing QFT or a Grover iterator. 
+Hadamard and CNOT can be perfomed via `x.had(i)` and `x.cnot(ctrl, targ)`.  Qumquat is a high level language - you should not find the need to use Hadamard and CNOT unless you are doing nitty-gritty stuff. 
 
 Example: uniform superposition over all inputs
 ```python
@@ -245,29 +300,14 @@ To run a sequence of statements in reverse you can use `with qq.inv():`. For exa
 
 ```python
 
-def omega(x, n):
-    qq.phase_2pi(x/(2**n))
-
-def qft(x,n):
-     for i in range(n)[::-1]:
-        x.had(i)
-        with qq.q_if(x[i]):
-            omega((x % 2**i)*2**(n-i-1),n)
-
-    # reverse order
-    for i in range(n//2):
-        x.cnot(i,n-i-1)
-        x.cnot(n-i-1,i)
-        x.cnot(i,n-i-1)
-
 # add 3 modulo 8
 n = 3
 
 x_prv = qq.reg([1,5,7])
 x = qq.reg(x_prv)
-qft(x,n)
+x.qft(2**n)
 omega(3*x, n)
-with qq.inv(): qft(x,n) # inverse QFT
+with qq.inv(): x.qft(2**n)
 
 qq.print(x_prv, x)
 # 1.0 4.0 w.p. 0.33333
@@ -554,4 +594,4 @@ qq.print(input, output)
 # 7.0 5.0 w.p. 0.25
 ```
 
-Normally reversible statements `+=, -=, *=, //=, **=, ^=, <<=` still insist on reversiblity, so `x += x + 1` and `x *= qq.reg([0,1])` will still crash. If you want to protect against irreversiblity for these statements, just use `x.assign` like `x.assign(x + x + 1)` or `x.assign(x*qq.reg([0,1]))`.
+Normally reversible statements `+=`, `-=`, `*=`, `//=`, `**=`, `^=`, `<<=` still insist on reversiblity, so `x += x + 1` and `x *= qq.reg([0,1])` will still crash. If you want to protect against irreversiblity for these statements, just use `x.assign` like `x.assign(x + x + 1)` or `x.assign(x*qq.reg([0,1]))`.
