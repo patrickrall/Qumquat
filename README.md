@@ -69,7 +69,7 @@ x = qq.reg(3)
 x *= 2    # now x is 6
 x *= 0  # raises IrrevError
 x //= 2   # reversible since x is a multiple of 2. x is now 3.
-x // 2  # raises IrrevError now that x is no longer a multiple of 2
+x //= 2  # raises IrrevError now that x is no longer a multiple of 2
 
 x **= 2     # now x is 9
 x **= 0   # raises IrrevError
