@@ -466,7 +466,7 @@ with qq.q_while(i < 3, qq.reg(0)):
     x = qq.reg(i)
     i += 1
 ```
-The while loop executes three times, but python only executes the contents of a `with` environment once, so `qq.reg` is actually only once. Despite this, three registers are allocated, so `x` refers to multiple registers!
+The while loop executes three times, but python only executes the contents of a `with` environment once, so `qq.reg` is actually only called once. Despite this, three registers are allocated, so `x` refers to multiple registers!
 
 This illustrates that `qq.reg` does not actually return a register. It returns a `Key` - a more complicated object that maintains references to registers. Sometimes keys can refer to multiple registers as above.
 
@@ -477,17 +477,17 @@ with qq.garbage():
     x = qq.reg(1) # key 0
     y = qq.reg(2) # key 1
     with qq.inv(): 
-        qq.reg(1) # key 2, paired to key 1
+        qq.reg(1) # key 2, paired to key 0
         qq.reg(2) # key 4, paired to key 1
 ````
 
-The ordering of the keys determines the pair matching, so be careful. The following code might make sense, but the `Key` are not smart enough to pair themselves correctly.
+The ordering of the keys determines the pair matching, so be careful. The following code might make sense, but the `Key` objects are not smart enough to pair themselves correctly.
 
 ```python
 with qq.garbage():
     x = qq.reg(1) # key 0
     y = qq.reg(2) # key 1
-    with qq.inv(): qq.reg(2) # key 2, paired to 1. Uncompute fails -> crash
+    with qq.inv(): qq.reg(2) # key 2, paired to 0. Uncompute fails -> crash
     with qq.inv(): qq.reg(1)
 ````
 
@@ -540,7 +540,7 @@ with qq.garbage('demo'):
 qq.assert_pile_clean('demo')
 ```
 
-This is especially useful for calling subroutines. so you can use `qq.garbage` as a decorator. For example:
+This is especially useful for calling subroutines, so you can use `qq.garbage` as a decorator. For example:
 
 ```python
 @qq.garbage('subroutine')
@@ -553,13 +553,11 @@ def messy_function(x):
 
     return out
 
-input = qq.reg([1,2,3,4,5])
-output = qq.reg(messy_function(input))
-with qq.inv(): messy_function(input)
+x = qq.reg([1,2,3,4,5])
+out = qq.reg(messy_function(input))
+with qq.inv(): messy_function(x)
 
-qq.print(input, output)
-
-qq.assert_pile_clean('subroutine')
+qq.print(x, out)
 # 1.0 2.0 w.p. 0.2
 # 2.0 3.0 w.p. 0.2
 # 3.0 5.0 w.p. 0.2
