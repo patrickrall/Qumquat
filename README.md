@@ -171,29 +171,31 @@ qq.phase_2pi(x)
 
 You can apply a QFT to a register `x` with `x.qft(d)`. Let `x = k*d + r`, where `r = x%d`. Then the QFT takes `|x>` to ` d^(-1/2)  sum_y e^(r * y * 2*pi*i/d) |k*d + y>`, where the sum is from `0` to `d-1`. It leaves the `k*d` part intact and only transforms `r`. 
 ```python
-x,y,z = qq.reg(-2, 1, 6)
-
+x = qq.reg(-4)
 x.qft(4)
-y.qft(4)
-z.qft(4)
+qq.print_amp(x)
+-4.0 w.a. 0.5
+-3.0 w.a. 0.5
+-2.0 w.a. 0.5
+-1.0 w.a. 0.5
+qq.clear()
 
-qq.print(x)
--4.0 w.p. 0.25
--3.0 w.p. 0.25
--2.0 w.p. 0.25
--1.0 w.p. 0.25
+x = qq.reg(1)
+x.qft(4)
+qq.print_amp(x)
+0.0 w.p. 0.5
+1.0 w.p. 1j*0.5
+2.0 w.p. -0.5
+3.0 w.p. -1j*0.5
+qq.clear()
 
-qq.print(y)
-0.0 w.p. 0.25
-1.0 w.p. 0.25
-2.0 w.p. 0.25
-3.0 w.p. 0.25
-
-qq.print(z)
-4.0 w.p. 0.25
-5.0 w.p. 0.25
-6.0 w.p. 0.25
-7.0 w.p. 0.25
+x = qq.reg(6)
+x.qft(4)
+qq.print_amp(x)
+4.0 w.p. 0.5
+5.0 w.p. -0.5
+6.0 w.p. 0.5
+7.0 w.p. -0.5
 ```
 
 #### Clear
@@ -330,7 +332,7 @@ qq.print(x)
 
 with qq.inv(): z = qq.reg(2)
 # raises SyntaxError -> attempted to read register that was never allocated.
-z = qq.reg(2) is inverted to z.clean(2), but z is unallocated.
+# z = qq.reg(2) is inverted to z.clean(2), but z is unallocated.
 ```
 
 So how does one uncompute garbage? This situation is unsatisfying because it encourages you to factor out your garbage registers as shown below. The quantum garbage collector makes this easier.
@@ -344,21 +346,21 @@ x = qq.reg(range(4))
 tmp = qq.reg(0)  # scratch space for do_thing
 
 do_thing(x,tmp)
-out = qq.reg(x)
+
+qq.print(x)
+# 0.0 w.p. 0.25
+# 2.0 w.p. 0.25
+# 6.0 w.p. 0.25
+# 12.0 w.p. 0.25
+
 with qq.inv(): do_thing(x,tmp)
 
 tmp.clean(0) # scratch space is uncomputed
-
-qq.print(x,out)
-# 0.0 0.0 w.p. 0.25
-# 1.0 2.0 w.p. 0.25
-# 2.0 6.0 w.p. 0.25
-# 3.0 12.0 w.p. 0.25
 ```
 
 #### While Loops
 
-Quantum while `qq.q_while(cond, tmp)` loops demand not only a loop condition `cond`, but also a temporary variable `tmp` to store the number of loops. This variable can't be changed in the while loop or affect the loop condition.
+Quantum while loops `with qq.q_while(cond, tmp):`  demand not only a loop condition `cond`, but also a temporary variable `tmp` to store the number of loops. This variable can't be changed in the while loop or affect the loop condition.
 
 On a real quantum computer a while loop is only possible if an upper bound on the number of iterations is known - how else would you generate the quantum circuit? Qumquat's simulator saves you this inconvenience by introspecting the superposition and stopping the loop when all branches are done.
 
