@@ -4,7 +4,7 @@ import random, math
 # quant-ph/1307.0411
 # estimate distance of vector u from centroid of {v_i}
 
-N = 20 # dimension
+N = 5 # dimension
 M = 10 # number of vectors in cluster
 
 u = [random.uniform(-5, 5) for i in range(N)]
@@ -39,7 +39,7 @@ with qq.q_if(tmp): phi_key = qq.reg(range(1,M+1))
 tmp.clean(phi_key > 0)
 
 # calculate t for hamiltonian
-t = 1e-8 * min(1/u_norm, min([1/v_norm for v_norm in v_norms]))
+t = 1e-4 * min(1/u_norm, min([1/v_norm for v_norm in v_norms]))
 print("t =", t)
 print("sin(|u|*t) - |u|*t is", math.sin(u_norm*t) - u_norm*t, "\n")
 
@@ -86,7 +86,8 @@ with qq.q_if(out):
 out.had(0)
 
 p_success = qq.postselect(out == 0)
+estimate = math.sqrt(2*Z*(2*p_success - 1))
 
 print("quantum probability:", p_success)
-print("quantum distance:", math.sqrt(Z*p_success))
+print("quantum distance:", estimate)
 print("classical distance:", distance)
