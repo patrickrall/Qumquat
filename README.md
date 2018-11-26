@@ -7,8 +7,6 @@ Qumquat is an experimental high-level quantum programming language. This languag
  - These algorithms do not run on NISQ quantum computers, so **Qumquat never 'compiles' to quantum gates** or even explicitly stores qubits. Since the runtime will always be a classical simulation, infinite-dimensional quantum registers and quantum while loops are possible.
  - Simply implementing an algorithm is an excellent way of solidifying one's understanding and also **ensure that the algorithm behaves as expected**. Qumquat is intended as an **educational tool for all levels of experience** in quantum computation.
 
-Qumquat is a side project that took 1.5 weeks to speed-code. So the documentation and code quality is abysmal, but the basic functionality works.
-
 ### Quantum Registers
 
 Quantum registers are created with `qq.reg`. **Qumquat registers are always signed integers**.
@@ -174,28 +172,28 @@ You can apply a QFT to a register `x` with `x.qft(d)`. Let `x = k*d + r`, where 
 x = qq.reg(-4)
 x.qft(4)
 qq.print_amp(x)
--4.0 w.a. 0.5
--3.0 w.a. 0.5
--2.0 w.a. 0.5
--1.0 w.a. 0.5
+# -4.0 w.a. 0.5
+# -3.0 w.a. 0.5
+# -2.0 w.a. 0.5
+# -1.0 w.a. 0.5
 qq.clear()
 
 x = qq.reg(1)
 x.qft(4)
 qq.print_amp(x)
-0.0 w.p. 0.5
-1.0 w.p. 1j*0.5
-2.0 w.p. -0.5
-3.0 w.p. -1j*0.5
+# 0.0 w.p. 0.5
+# 1.0 w.p. 1j*0.5
+# 2.0 w.p. -0.5
+# 3.0 w.p. -1j*0.5
 qq.clear()
 
 x = qq.reg(6)
 x.qft(4)
 qq.print_amp(x)
-4.0 w.p. 0.5
-5.0 w.p. -0.5
-6.0 w.p. 0.5
-7.0 w.p. -0.5
+# 4.0 w.p. 0.5
+# 5.0 w.p. -0.5
+# 6.0 w.p. 0.5
+# 7.0 w.p. -0.5
 ```
 
 #### Clear
@@ -218,10 +216,40 @@ for i in range(3,10):
     qq.print(x)
 ```
 
+#### State preparation and QRAM
+
+Some quantum algorithms require data structures that can quickly prepare certain quantum states or query dictionaries in superposition.
+
+Given a dictionary whose keys are integers and values are floats, qumquat can prepare a register whose amplitudes are the normalized dictionary values.
+
+```python
+v = {0:0.2, 1:0.4}
+x = qq.reg(v)
+qq.print_amp(x)
+# 0.0 w.a. 0.44721 # ( = 0.2/sqrt(0.2**2 + 0.4**2))
+# 1.0 w.a. 0.89443 # ( = 0.4/sqrt(0.2**2 + 0.4**2))
+
+```
+
+Given a dictionary whose keys are integers and values are either floats or integers, an expression can be used as a key to the dictionary via `expr.qram(dict)`.
+
+```python
+dict = {0:0.2, 1:0.4}
+key = qq.reg([0,1])
+qq.print(key,key.qram(dict))
+# 0.0, 0.2 w.p. 0.5
+# 1.0, 0.4 w.p. 0.5
+
+# QRAM queries also work on lists
+qq.print(key,key.qram([12.2, 42.1])
+# 0.0, 12.2 w.p. 0.5
+# 1.0, 42.1 w.p. 0.5
+```
+
 
 #### Low level bitwise operations
 
-Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permit access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
+Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permits access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
 
 ```python
 x = qq.reg(-10)
@@ -287,13 +315,26 @@ with qq.q_if(x > 1): x -= 1  # raises SyntaxError
 if qq.q_if(x[1]): qq.phase_pi(1)
 ```
 
-Quantum if statements do not affect register creation.
+Quantum registers created inside a quantum if statement will always be allocated (to 0), but are only conditionally initialized.
 
 ```python
 x = qq.reg([0,1])
 with qq.q_if(x): y = qq.reg(2)
 qq.print(y)
-# 2.0 w.p. 1.0
+# 0.0 w.p. 0.5
+# 2.0 w.p. 0.5
+```
+
+This can be used to prepare more complicated states: say we want to prepare a particular quantum state from a dictionary, but only if a control register is 1. Use `qq.init(key, value)` to directly access the initialization facilities of `qq.reg`
+
+```
+v = {0:0.2, 1:0.4}
+ctrl = qq.reg([0,1])
+
+psi = qq.reg(0) # empty register
+with qq.q_if(ctrl): qq.init(psi, v)
+
+# state is now 2^(-1/2) * ( |0>|0> + |1>|v> )
 ```
 
 #### Inversion
@@ -317,7 +358,7 @@ qq.print(x_prv, x)
 # 7.0 2.0 w.p. 0.33333
 ```
 
-Inversion interacts more interestingly with `qq.reg` - the inverse of of `x = qq.reg(42)` is `x.clean(42)`. But if you only write `qq.reg` without a matching `clean`, then inverted `qq.reg` will deallocate ... what register?
+Inversion interacts interestingly with `qq.reg` - the inverse of of `x = qq.reg(42)` is `x.clean(42)`. But if you only write `qq.reg` without a matching `clean`, then inverted `qq.reg` will deallocate ... what register?
 
 ```python
 x = qq.reg(0)
@@ -441,7 +482,7 @@ Is returning the loop variable to its initial value always the best choice? What
 
 ### Quantum Garbage Collection
 
-Reversible computation is a bit annoying - you have to follow annoying rules to ensure reversiblity, and whenever you use temporary registers you have to worry about cleaning them up. This can be tricky as the for loop example shows. 
+Reversible computation is a bit annoying - you have to follow restrictive rules to ensure reversiblity, and whenever you use temporary registers you have to worry about cleaning them up. This can be tricky as the for loop example shows. 
 
 Ideally, you should be able to declare as many temporary registers as you want without worry and write irreversible code, and have uncomputing still work. The quantum garbage collector mostly enables this.
 

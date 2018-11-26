@@ -1,9 +1,14 @@
 from qvars import *
+from utils import Utils
 from random import random
 import math, copy, cmath
 
 
 class Qumquat(object):
+
+    def __init__(self):
+        self.utils = Utils(self)
+
 
     branches = [{"amp": 1+0j}]
 
@@ -15,13 +20,20 @@ class Qumquat(object):
         return True
 
     def call(self, tup, invert=False):
-        if not invert:
-            getattr(self, tup[0])(*tup[1])
+        if tup[0][:6] == "utils_":
+            targ = self.utils
+            key = tup[6:]
         else:
-            if tup[0][-4:] == "_inv":
-                getattr(self, tup[0][:-4])(*tup[1])
+            targ = self
+            key = tup[0]
+
+        if not invert:
+            getattr(targ, key)(*tup[1])
+        else:
+            if key[-4:] == "_inv":
+                getattr(targ, key[:-4])(*tup[1])
             else:
-                getattr(self, tup[0]+"_inv")(*tup[1])
+                getattr(targ, key+"_inv")(*tup[1])
 
     controls = [] # list of expressions
 
@@ -164,15 +176,23 @@ class Qumquat(object):
         if self.queue_action('init', key, val): return
         self.assert_mutable(key)
 
-        for branch in self.branches:
+        for branch in self.controlled_branches():
             if branch[key.index()] != 0: raise ValueError("Register already initialized!")
 
         # cast ranges to superpositions, permitting qq.reg(range(3))
         if isinstance(val, range): val = list(val)
         if isinstance(val, Key): val = Expression(val)
+        if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
 
-        if isinstance(val, list):
-            # uniform superposition
+        if isinstance(val, Expression):
+            if val.float: raise TypeError("Quantum registers can only contain ints")
+            for branch in self.controlled_branches():
+                branch[key.index()] = es_int(val.c(branch))
+
+        elif isinstance(val, list):
+            # uniform superposition over elements in list
+
+            # check list for validity
             for i in range(len(val)):
                 if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
                     raise TypeError("Superpositions only support integer literals.")
@@ -180,25 +200,41 @@ class Qumquat(object):
                     raise ValueError("Superpositions can't contain repeated values.")
 
             newbranches = []
+            goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
             for branch in self.branches:
-                for x in val:
-                    newbranch = copy.copy(branch)
-                    newbranch[key.index()] = es_int(x)
-                    newbranch["amp"] /= math.sqrt(len(val))
-                    newbranches.append(newbranch)
+                if goodbranch(branch):
+                    for x in val:
+                        newbranch = copy.copy(branch)
+                        newbranch[key.index()] = es_int(x)
+                        newbranch["amp"] /= math.sqrt(len(val))
+                        newbranches.append(newbranch)
+                else:
+                    newbranches.append(branch)
 
             self.branches = newbranches
+        elif isinstance(val, dict):
+            # check if dictionary has integer keys, and get norm
+            norm = 0
+            for k in val.keys():
+                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+                if not isinstance(val[k], float): raise TypeError("QRAM values must be integers.")
+                norm += abs(val[k])**2
 
-        elif isinstance(val, int) or isinstance(val, es_int):
+            newbranches = []
+            goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
             for branch in self.branches:
-                branch[key.index()] = es_int(val)
+                if goodbranch(branch):
+                    for k in val.keys():
+                        newbranch = copy.copy(branch)
+                        newbranch[key.index()] = es_int(k)
+                        newbranch["amp"] *= val[k]/math.sqrt(norm)
+                        newbranches.append(newbranch)
+                else:
+                    newbranches.append(branch)
 
-        elif isinstance(val, Expression):
-            if val.float: raise TypeError("Quantum registers can only contain ints")
-            for branch in self.branches:
-                branch[key.index()] = es_int(val.c(branch))
+            self.branches = newbranches
         else:
-            raise TypeError("Quantum registers can only contain ints")
+            raise TypeError("Invalid initialization of register with type ", type(val))
 
     # takes a register and a guess for what state it is in
     # if the guess is correct, the register is set to |0>
@@ -209,30 +245,51 @@ class Qumquat(object):
 
         if isinstance(val, range): val = list(val)
         if isinstance(val, Key): val = Expression(val)
+        if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
 
-        if isinstance(val, list):
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        if isinstance(val, Expression):
+            for branch in self.branches:
+                if goodbranch(branch): target = val.c(branch)
+                else: target = 0
+
+                if branch[key.index()] != target:
+                    raise ValueError("Failed to uncompute: not all branches matched specified value.\n\
+                            (Expected "+str(target)+" but found branch with "+str(branch[key.index()])+")")
+                    branch[key.index()] = es_int(0)
+
+        elif isinstance(val, list):
+            # uniform superposition
+
+            # check valid
             for i in range(len(val)):
                 if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
                     raise TypeError("Superpositions only support non-superposed integers.")
                 if val.index(val[i]) != i:
                     raise TypeError("Superpositions can't contain repeated values.")
 
+
             # populate newbranches with branches matching first list item
+            untouchedbranches = []
             newbranches = []
             for branch in self.branches:
-                if branch[key.index()] != val[0]: continue
+                if goodbranch(branch):
+                    if branch[key.index()] != val[0]: continue
 
-                b = copy.copy(branch)
-                b[key.index()] = 0
-                newbranches.append(b)
+                    b = copy.copy(branch)
+                    b[key.index()] = 0
+                    newbranches.append(b)
+                else:
+                    untouchedbranches.append(branch)
 
-            if len(self.branches) != len(newbranches)*len(val):
+            if len(self.branches) != len(newbranches)*len(val) + len(untouchedbranches):
                 raise ValueError("Failed to clean superposition.")
 
             # check if other list items match up
             for i in range(1,len(val)):
                 found = [] # list of indices in newbranches, where partners were found in branches
                 for branch in self.branches:
+                    if not goodbranch(branch): continue
                     if branch[key.index()] != val[i]: continue
 
                     matched = False
@@ -242,7 +299,11 @@ class Qumquat(object):
                         good = True
                         for k in newbranches[j].keys():
                             if k == key.index(): continue
-                            if newbranches[j][k] != branch[k]:
+                            if k == "amp":
+                                if abs(newbranches[j][k] - branch[k]) > 1e-10:
+                                    good = False
+                                    break
+                            elif newbranches[j][k] != branch[k]:
                                 good = False
                                 break
 
@@ -259,22 +320,71 @@ class Qumquat(object):
             self.branches = newbranches
             for branch in self.branches:
                 branch["amp"] *= math.sqrt(len(val))
+            self.branches += untouchedbranches
 
-        elif isinstance(val, int) or isinstance(val, es_int):
-            for branch in self.branches:
-                if branch[key.index()] != val:
-                    raise ValueError("Failed to uncompute: not all branches matched specified value.\n (Expected "+str(val)+" but found branch with "+str(branch[key.index()])+". Register: "+str(key.index())+", key:"+str(key.key)+")")
-                branch[key.index()] = 0
-        elif isinstance(val, Expression):
-            if key.key in val.keys:
-                raise SyntaxError("Can't clean register using its own value.")
+        elif isinstance(val, dict):
+            # check if dictionary has integer keys, and get norm
+            norm = 0
+            for k in val.keys():
+                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+                if not isinstance(val[k], float): raise TypeError("QRAM values must be floats.")
+                norm += abs(val[k])**2
 
+            keys = list(val.keys())
+
+            untouchedbranches = []
+            newbranches = []
             for branch in self.branches:
-                if branch[key.index()] != val.c(branch):
-                    raise ValueError("Failed to clean: not all branches matched specified value.")
-                branch[key.index()] = 0
+                if goodbranch(branch):
+                    if branch[key.index()] != val[keys[0]]: continue
+
+                    b = copy.copy(branch)
+                    b[key.index()] = es_int(0)
+                    newbranches.append(b)
+                else:
+                    untouchedbranches.append(branch)
+
+            if len(self.branches) != len(newbranches)*len(keys) + len(untouchedbranches):
+                raise ValueError("Failed to clean QRAM.")
+
+            # check if other list items match up
+            for i in range(1,len(keys)):
+                k = keys[i]
+                found = [] # list of indices in newbranches, where partners were found in branches
+                for branch in self.branches:
+                    if not goodbranch(branch): continue
+                    if branch[key.index()] != val[k]: continue
+
+                    matched = False
+                    for j in range(len(newbranches)):
+                        if j in found: continue
+
+                        good = True
+                        for ks in newbranches[j].keys():
+                            if ks == key.index(): continue
+                            if ks == "amp":
+                                if abs(newbranches[j][ks] - branch[ks]) > 1e-10:
+                                    good = False
+                                    break
+                            elif newbranches[j][ks] != branch[ks]:
+                                good = False
+                                break
+                        if good:
+                            found.append(j)
+                            matched = True
+                            break
+
+                    if not matched:
+                        raise ValueError("Failed to clean QRAM.")
+                if len(found) < len(newbranches):
+                    raise ValueError("Failed to clean QRAM.")
+
+            self.branches = newbranches
+            for branch in self.branches:
+                branch["amp"] /= val[keys[0]]/math.sqrt(norm)
+            self.branches += untouchedbranches
         else:
-            raise TypeError("Quantum registers can only contain ints")
+            raise TypeError("Invalid un-initialization of register with type ", type(val))
 
     ######################################## Measurement and printing
 
@@ -346,6 +456,30 @@ class Qumquat(object):
 
         return values[pick]
 
+
+    def postselect(self, expr):
+        if len(self.mode_stack) > 0:
+            raise SyntaxError("Can only measure at top-level.")
+
+        expr = Expression(expr, self)
+
+        newbranches = []
+        prob = 0
+        for branch in self.branches:
+            if expr.c(branch) != 0:
+                newbranches.append(branch)
+                prob += abs(branch["amp"])**2
+
+        if len(newbranches) == 0:
+            raise ValueError("Postselection failed!")
+        self.branches = newbranches
+
+        for branch in self.branches:
+            branch["amp"] /= math.sqrt(prob)
+
+        return float(prob)
+
+
     def print(self, *exprs):
         if self.queue_action('print', *exprs): return
 
@@ -409,7 +543,7 @@ class Qumquat(object):
 
             rounded = round(phi/cmath.pi,10)
             if round(rounded,5) == rounded:
-                if int(rounded) == 1:
+                if int(rounded) in [-1, 1]:
                     return "-"+str(r)
                 elif rounded == 0.5:
                     return "1j*"+str(r)

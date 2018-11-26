@@ -389,6 +389,98 @@ def test_qft():
         qq.print(x)
 
 
+def test_postselect():
+    print("postselect")
+
+    x = qq.reg(range(42))
+
+    print("postselection success:", qq.postselect(x**3 % 5 == 1))
+    qq.print(x)
+    qq.clear()
+
+
+def test_qram():
+    print("qram")
+
+    d1 = {0: 3, 1: 4, 2: 3}
+    d2 = [6,5,2,6,1]
+    x = qq.reg([0,1,2])
+
+    qq.print(x, x.qram(d1), x.qram(d2))
+
+
+def test_rotY():
+    print("rotY")
+
+    y = qq.reg(0)
+    qq.utils.rotY(y, 0, 2*math.pi*30/360)
+    qq.print_amp(y)
+
+
+
+    return
+    ps = []
+    n = 91 # should be odd
+
+    for i in range(n):
+        y = qq.reg(0)
+        qq.utils.rotY(y, 0, 2*math.pi*i/n)
+        qq.print_amp(360*i/n, y)
+
+        ps.append(qq.postselect(y == 0))
+        y.clean(0)
+
+    plt.bar(range(n), ps)
+    plt.plot(range(n), [math.cos(2*math.pi*i/n)**2 for i in range(n)])
+    plt.show()
+
+
+def test_mul_amp():
+    print("mul_amp")
+
+    d2 = {0: 0.123, 1:0.567}
+    n = 2
+    x = qq.reg(range(2))
+
+    y = qq.reg(0)
+    qq.utils.rotY(y, 0, (x.qram(d2)).acos())
+    qq.print_amp(x, y)
+    for i in range(2):
+        print(i, d2[i]/math.sqrt(2))
+
+    prob = qq.postselect(y == 0)
+    print("ps", prob)
+    qq.print_amp(x, y)
+    for i in range(2):
+        print(i, (1/math.sqrt(prob))*d2[i]/math.sqrt(2))
+
+
+def test_condinit():
+    print("conditional init")
+    z = qq.reg([5,6])
+    # conditional initialization?
+    x = qq.reg([0,1])
+    with qq.q_if(x): y = qq.reg([2,3])
+    qq.print_amp(x,y)
+    with qq.q_if(x): y.clean([2,3])
+    x.clean([0,1])
+
+
+def test_stateprep():
+    print("state prep")
+    z = qq.reg([5,6])
+
+    v = {0: 0.5, 1: 0.3}
+
+    x = qq.reg([0,1])
+    with qq.q_if(x): y = qq.reg(v)
+    qq.print_amp(x,y)
+    with qq.q_if(x): y.clean(v)
+    x.clean([0,1])
+
+
+
+
 if True:
     test_init()
     test_inv()
@@ -407,4 +499,8 @@ if True:
     test_repeated_square()
     test_for()
     test_qft()
+    test_postselect()
+    test_qram()
+    test_condinit()
+    test_stateprep()
 

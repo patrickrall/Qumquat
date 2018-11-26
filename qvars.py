@@ -383,6 +383,9 @@ class Key():
     def clean(self, expr):
         self.qq.clean(self, expr)
 
+    def qram(self, dictionary):
+        return Expression(self).qram(dictionary)
+
 
 ###################################################################
 
@@ -417,7 +420,8 @@ class Expression(object):
             self.c = lambda b: val
             self.float = True
 
-        if not hasattr(self, "keys"): raise ValueError
+        if not hasattr(self, "keys"):
+            raise ValueError("Invalid expression of type " + str(type(val)))
 
     # private method
     def op(self, expr, c, makesFloat):
@@ -517,7 +521,7 @@ class Expression(object):
     def __ne__(self, expr): return self.op(expr, lambda x,y: es_int(x != y), False)
 
 
-    ######################### TODO: sqrt, sin, cos, etc.
+    ######################### Rounding
 
     def round(self):
         newexpr = Expression(self)
@@ -539,6 +543,79 @@ class Expression(object):
         newexpr = Expression(self)
         newexpr.c = lambda b: es_int(math.ceil(self.c(b)))
         newexpr.float = False
+        return newexpr
+
+
+    ######################### Trig, sqrt
+
+    def sin(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.sin(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def cos(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.cos(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def tan(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.tan(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def asin(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.asin(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def acos(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.acos(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def atan(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.atan(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def sqrt(self):
+        newexpr = Expression(self)
+        newexpr.c = lambda b: math.sqrt(float(self.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    ######################### QRAM
+
+    def qram(self, dictionary):
+        if self.float:
+            raise ValueError("QRAM keys must be integers, not floats.")
+
+        # cast dictionaries to lists
+        if isinstance(dictionary, list):
+            dictionary = {i:dictionary[i] for i in range(len(dictionary))}
+
+        casted_dict = {}
+
+        isFloat = None
+
+        for key in dictionary.keys():
+            if isFloat is None:
+                isFloat = int(dictionary[key]) != dictionary[key]
+
+            if isFloat:
+                casted_dict[key] = float(dictionary[key])
+            else:
+                casted_dict[key] = es_int(dictionary[key])
+
+        newexpr = Expression(self)
+        newexpr.c = lambda b: casted_dict[int(self.c(b))]
+        newexpr.float = isFloat
         return newexpr
 
 
