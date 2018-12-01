@@ -424,12 +424,20 @@ class Expression(object):
             raise ValueError("Invalid expression of type " + str(type(val)))
 
     # private method
-    def op(self, expr, c, makesFloat):
+    def op(self, expr, c, floatmode="inherit"):
+        # "inherit" -> is float if any parent is float
+        # "always" -> always a float
+        # "never" -> never a float
+
         expr = Expression(expr, self.qq)
 
         newexpr = Expression(0, self.qq)
         newexpr.keys = set(self.keys) | set(expr.keys)
-        newexpr.float = makesFloat or self.float or expr.float
+
+        if floatmode == "inherit":
+             newexpr.float = self.float or expr.float
+        if floatmode == "always": newexpr.float = True
+        if floatmode == "never": newexpr.float = False
 
         if newexpr.float:
             newexpr.c = lambda b: c(float(self.c(b)), float(expr.c(b)))
@@ -438,23 +446,23 @@ class Expression(object):
 
         return newexpr
 
-    def __add__(self, expr): return self.op(expr, lambda x,y: x+y, False)
-    def __sub__(self, expr): return self.op(expr, lambda x,y: x-y, False)
-    def __mul__(self, expr): return self.op(expr, lambda x,y: x*y, False)
+    def __add__(self, expr): return self.op(expr, lambda x,y: x+y)
+    def __sub__(self, expr): return self.op(expr, lambda x,y: x-y)
+    def __mul__(self, expr): return self.op(expr, lambda x,y: x*y)
 
     def __radd__(self, expr): return self + expr
     def __rsub__(self, expr): return -self + expr
     def __rmul__(self, expr): return self * expr
 
-    def __truediv__(self, expr): return self.op(expr, lambda x,y: x / y, True)
-    def __floordiv__(self, expr): return self.op(expr, lambda x,y: x // y, False)
-    def __mod__(self, expr): return self.op(expr, lambda x,y: x % y, False)
+    def __truediv__(self, expr): return self.op(expr, lambda x,y: x / y, "always")
+    def __floordiv__(self, expr): return self.op(expr, lambda x,y: x // y)
+    def __mod__(self, expr): return self.op(expr, lambda x,y: x % y)
 
-    def __rtruediv__(self, expr): return self.op(expr, lambda x,y: y / x, True)
-    def __rfloordiv__(self, expr): return self.op(expr, lambda x,y: y // x, False)
-    def __rmod__(self, expr): return self.op(expr, lambda x,y: y % x, False)
+    def __rtruediv__(self, expr): return self.op(expr, lambda x,y: y / x, "always")
+    def __rfloordiv__(self, expr): return self.op(expr, lambda x,y: y // x)
+    def __rmod__(self, expr): return self.op(expr, lambda x,y: y % x)
 
-    def __pow__(self, expr): return self.op(expr, lambda x,y: x**y, True)
+    def __pow__(self, expr): return self.op(expr, lambda x,y: x**y, "always")
     def __rpow__(self, expr): return pow(Expression(expr, self.qq), self)
 
     def __neg__(self):
@@ -482,14 +490,14 @@ class Expression(object):
 
     ######################### Bitwise operations
 
-    def __lshift__(self, expr): return self.op(expr, lambda x,y: x << y, False)
-    def __rshift__(self, expr): return self.op(expr, lambda x,y: x >> y, False)
-    def __and__(self, expr): return self.op(expr, lambda x,y: x & y, False)
-    def __xor__(self, expr): return self.op(expr, lambda x,y: x ^ y, False)
-    def __or__(self, expr): return self.op(expr, lambda x,y: x | y, False)
+    def __lshift__(self, expr): return self.op(expr, lambda x,y: x << y, "never")
+    def __rshift__(self, expr): return self.op(expr, lambda x,y: x >> y, "never")
+    def __and__(self, expr): return self.op(expr, lambda x,y: x & y, "never")
+    def __xor__(self, expr): return self.op(expr, lambda x,y: x ^ y, "never")
+    def __or__(self, expr): return self.op(expr, lambda x,y: x | y, "never")
 
-    def __rlshift__(self, expr): return self.op(expr, lambda x,y: y << x, False)
-    def __rrshift__(self, expr): return self.op(expr, lambda x,y: y >> x, False)
+    def __rlshift__(self, expr): return self.op(expr, lambda x,y: y << x, "never")
+    def __rrshift__(self, expr): return self.op(expr, lambda x,y: y >> x, "never")
     def __rand__(self, expr): return self & expr
     def __rxor__(self, expr): return self ^ expr
     def __ror__(self, expr): return self | expr
@@ -513,12 +521,12 @@ class Expression(object):
     ######################### Comparisons
 
     # should return int
-    def __lt__(self, expr): return self.op(expr, lambda x,y: es_int(x < y), False)
-    def __le__(self, expr): return self.op(expr, lambda x,y: es_int(x <= y), False)
-    def __gt__(self, expr): return self.op(expr, lambda x,y: es_int(x > y), False)
-    def __ge__(self, expr): return self.op(expr, lambda x,y: es_int(x >= y), False)
-    def __eq__(self, expr): return self.op(expr, lambda x,y: es_int(x == y), False)
-    def __ne__(self, expr): return self.op(expr, lambda x,y: es_int(x != y), False)
+    def __lt__(self, expr): return self.op(expr, lambda x,y: es_int(x < y), "never")
+    def __le__(self, expr): return self.op(expr, lambda x,y: es_int(x <= y), "never")
+    def __gt__(self, expr): return self.op(expr, lambda x,y: es_int(x > y), "never")
+    def __ge__(self, expr): return self.op(expr, lambda x,y: es_int(x >= y), "never")
+    def __eq__(self, expr): return self.op(expr, lambda x,y: es_int(x == y), "never")
+    def __ne__(self, expr): return self.op(expr, lambda x,y: es_int(x != y), "never")
 
 
     ######################### Rounding

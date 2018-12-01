@@ -698,7 +698,7 @@ class Qumquat(object):
         theta = Expression(theta, self)
 
         for branch in self.controlled_branches():
-            branch['amp'] *= cmath.exp(1j*theta.c(branch))
+            branch['amp'] *= cmath.exp(1j*float(theta.c(branch)))
 
     def phase_inv(self, theta):
         self.phase(-theta)

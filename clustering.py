@@ -25,12 +25,35 @@ for j in range(M):
 
 distance = math.sqrt(sum([x**2 for x in delta]))
 
+# calculate t for hamiltonian
+t = 1e-4 * min(1/u_norm, min([1/v_norm for v_norm in v_norms]))
+print("t =", t)
+print("sin(|u|*t) - |u|*t is", math.sin(u_norm*t) - u_norm*t, "\n")
 
 ######################## quantum algorithm
 
-# TODO: compute this using quantum counting.
+tmp = qq.reg([0,1])
+with qq.q_if(tmp): phi_key = qq.reg(range(1,M+1))
+tmp.clean(phi_key > 0)
+
+tmp = qq.reg([-1,1])
+
+# use quantum counting to estimate Z
+T = 20
+j = qq.reg(T)
+
+with qq.q_if(phi_key == 0): qq.phase(t*u_norm * tmp * j)
+with qq.q_if(phi_key > 0): qq.phase(t*(phi_key-1).qram(v_norms) * tmp * j)
+
+with qq.inv(): j.qft(T)
+
+estimate = qq.measure(2*math.pi*j/T)
+
+qq.clear()
+
 # This classical method takes linear time.
 Z = u_norm**2 + sum([v_norm**2 for v_norm in v_norms])/M
+print(Z, estimate)
 
 ############## prepare state phi in phi_key
 
@@ -38,10 +61,7 @@ tmp = qq.reg([0,1])
 with qq.q_if(tmp): phi_key = qq.reg(range(1,M+1))
 tmp.clean(phi_key > 0)
 
-# calculate t for hamiltonian
-t = 1e-4 * min(1/u_norm, min([1/v_norm for v_norm in v_norms]))
-print("t =", t)
-print("sin(|u|*t) - |u|*t is", math.sin(u_norm*t) - u_norm*t, "\n")
+
 
 # ancilla in |+> state (on sign bit)
 tmp = qq.reg([-1,1])
@@ -91,3 +111,5 @@ estimate = math.sqrt(2*Z*(2*p_success - 1))
 print("quantum probability:", p_success)
 print("quantum distance:", estimate)
 print("classical distance:", distance)
+
+qq.clear()
