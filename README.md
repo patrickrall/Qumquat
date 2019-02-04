@@ -5,7 +5,7 @@ Qumquat is an experimental high-level quantum programming language. This languag
 
  - These algorithms demand **reversible classical computation in superposition**. Qumquat is designed to feel like any other imperative programming language to make classical programming comfortable.
  - These algorithms do not run on NISQ quantum computers, so **Qumquat never 'compiles' to quantum gates** or even explicitly stores qubits. Since the runtime will always be a classical simulation, infinite-dimensional quantum registers and quantum while loops are possible.
- - Simply implementing an algorithm is an excellent way of solidifying one's understanding and also **ensure that the algorithm behaves as expected**. Qumquat is intended as an **educational tool for all levels of experience** in quantum computation.
+ - Simply implementing an algorithm is an excellent way of solidifying one's understanding and also to **ensure that the algorithm behaves as expected**. Qumquat is intended as an **educational tool for all levels of experience** in quantum computation.
 
 ### Quantum Registers
 
@@ -22,7 +22,7 @@ x += 4
 qq.print("My register:", x) # My register: 7.0 w.p. 1.0
 ```
 
-Multiple registers can be declared at one and printed at once. Pass a list to `qq.reg` and it will initialize the qubit to a superposition of those values.  `qq.print_amp` will list the possible values, and print the amplitudes corresponding to that value.
+Multiple registers can be declared at once and printed at once. Pass a list to `qq.reg` and it will initialize the qubit to a superposition of those values.  `qq.print_amp` will print all possible values in the current global superposition, with repeated amplitudes for repeated values.
 
 ```python
 x,y = qq.reg(10, range(3))
@@ -48,7 +48,7 @@ x,y = qq.reg(10, range(3))
 x += 3
 
 x.clean(13) # register x is now deallocated
-x += 1 # raises SyntaxError
+# x += 1 # raises SyntaxError
 
 z = qq.reg(y)
 
@@ -65,13 +65,13 @@ Operations `+=`, `-=`, `*=`, `//=`, `**=`, `^=`, `<<=` are permitted whenever th
 x = qq.reg(3)
 
 x *= 2    # now x is 6
-x *= 0  # raises IrrevError
+# x *= 0  # raises IrrevError
 x //= 2   # reversible since x is a multiple of 2. x is now 3.
-x //= 2  # raises IrrevError now that x is no longer a multiple of 2
+# x //= 2  # raises IrrevError now that x is no longer a multiple of 2
 
 x **= 2     # now x is 9
-x **= 0   # raises IrrevError
-x **= -1  # raises IrrevError (x would have to be a float)
+# x **= 0   # raises IrrevError
+# x **= -1  # raises IrrevError (x would have to be a float, but must remain an integer)
 
 x ^= 8   # now x is 1
 x <<= 1  # now x is 2
@@ -79,20 +79,23 @@ x <<= 1  # now x is 2
 
 #### Expressions
 
-Creating and cleaning a register for every value is cumbersome and inefficient. Sometimes we only need an expression, e.g. `x+2` for a brief moment. When arithmetic on a register is performed, an `Expression` object is created that holds the corresponding value depending on the register. This arithmetic can be irreversible, since the register is not changed. Furthermore expressions can be floats!
+Creating and cleaning a register for every value is cumbersome and inefficient. Sometimes we only need an expression, e.g. `x+2` for a brief moment. When arithmetic on a register is performed, an `Expression` object is created that holds the corresponding value depending on the register. This arithmetic can be irreversible, since the register is not changed. Furthermore, expressions can be floats!
 
 ```python
-
+# create Register x
 x = qq.reg([1,2,3])
 
+# temporarily create Expression for (x*0)
 qq.print(x*0)  # 0.0 w.p. 1.0
 
+# temporarily create Expression for (x // 2)
 y = qq.reg(x // 2)
 qq.print(x,y)
 # 1.0 0.0 w.p. 0.33333
 # 2.0 1.0 w.p. 0.33333
 # 3.0 1.0 w.p. 0.33333
 
+# temporarily create Expression for (x / 2)
 qq.print(x,x / 2)
 # 1.0 0.5 w.p. 0.33333
 # 2.0 1.0 w.p. 0.33333
@@ -100,7 +103,7 @@ qq.print(x,x / 2)
 
 # DON'T DO THIS! This will not behave as expected.
 x = x+1
-# Now x is an Expression, not a register.
+# Since x+1 is an expression, x is assigned to an Expression, not a register.
 # You now longer have a reference to the register x used to refer to.
 # This bug is nasty since it can be hard to spot - operations like +=
 # are still defined on expressions. Here are some functions that now fail:
@@ -111,7 +114,7 @@ x.assign(1) # raises AttributeError
 x.clean(0) # raises AttributeError
 
 ```
-If a successor of this language were to compile to a real quantum computer, it would allocate extra qubits to temporarily hold on to the value of the expression. These qubits would then be immediately uncomputed automatically.
+If a successor of this language were to compile to a real quantum computer, it would allocate extra qubits to temporarily hold on to the value of the expression. These qubits would then be uncomputed automatically.
 
 #### Measurement
 
@@ -151,7 +154,7 @@ plt.show()
 
 #### Phase
 
-The `qq.phase(theta)` method allows you to multiply the amplitude `e^(i*theta)`. To make this phase non-global `theta` must be an expression (or you are using a quantum if statement). For your convenience there are `qq.phase_pi(expr)` for `e^(i*pi*expr)` and `qq.phase_2pi(expr)` for `e^(2*pi*i*expr)`.
+The `qq.phase(theta)` method allows you to multiply the amplitude `e^(i*theta)`. To make this phase non-global `theta` should be an expression  or a register (or you are using a quantum if statement). For your convenience there are `qq.phase_pi(expr)` for `e^(i*pi*expr)` and `qq.phase_2pi(expr)` for `e^(2*pi*i*expr)`.
 
 ```python
 x = qq.reg(range(3))
@@ -198,7 +201,7 @@ qq.print_amp(x)
 
 #### Clear
 
-If your are done with all of the registers and don't want to go through the trouble of cleaning them up, you can clear the state of Qumquat with `qq.clear()`. This strongly improves performance.
+If you are done with all of the registers and don't want to go through the trouble of cleaning them up, you can clear the state of Qumquat with `qq.clear()`. This strongly improves performance.
 
 ```python
 # this gets super slow for later operations
@@ -234,9 +237,9 @@ qq.print_amp(x)
 Given a dictionary whose keys are integers and values are either floats or integers, an expression can be used as a key to the dictionary via `expr.qram(dict)`.
 
 ```python
-dict = {0:0.2, 1:0.4}
+dic = {0:0.2, 1:0.4}
 key = qq.reg([0,1])
-qq.print(key,key.qram(dict))
+qq.print(key,key.qram(dic))
 # 0.0, 0.2 w.p. 0.5
 # 1.0, 0.4 w.p. 0.5
 
@@ -249,7 +252,7 @@ qq.print(key,key.qram([12.2, 42.1])
 
 #### Low level bitwise operations
 
-Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permits access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minumum number of bits needed to write down the register.
+Qumquat registers are signed integers, not qubits. However in some situations, e.g. graph coloring, it might be more appropriate to view a register as an infinite sequence of qubits. A qumquat register `x` permits access to bits: `x[-1]` is the sign bit and `x[i]` is the `2^i` digit in the binary expansion. `x.len()` gives the minimum number of bits needed to write down the register.
 
 ```python
 x = qq.reg(-10)
@@ -283,7 +286,7 @@ x.cnot(0,1)
 y = qq.reg([0,3])
 ```
 
-Qumquat actually implements a custom class `es_int` - explicitly signed int - for the registers. `es_int` quacks like a regular python int, but `+0` and `-0` are different numbers, i.e `es_int(0) == -es_int(0)` evaluates to `False`. This is necessary because it should be possible to hadamard the sign bit regardless of the value of the rest of the register. However, this is just a technicality. The user should never have to care, especially since `qq.measure` casts to a float.
+Qumquat actually implements a custom class `es_int` - explicitly signed int - for the registers. `es_int` behaves like a regular python int, but `+0` and `-0` are different numbers, i.e `es_int(0) == -es_int(0)` evaluates to `False`. This is necessary because it should be possible to hadamard the sign bit regardless of the value of the rest of the register. However, this is just a technicality. The user should never have to care, especially since `qq.measure` casts to a float.
 
 
 ### Reversible programming
@@ -309,7 +312,7 @@ qq.print(x,y)
 # 1.0 0.0 w.p. 0.33333
 # 2.0 2.0 w.p. 0.33333
 
-with qq.q_if(x > 1): x -= 1  # raises SyntaxError
+# with qq.q_if(x > 1): x -= 1  # raises SyntaxError
 
 # Z gate on index 1
 if qq.q_if(x[1]): qq.phase_pi(1)
@@ -327,7 +330,7 @@ qq.print(y)
 
 This can be used to prepare more complicated states: say we want to prepare a particular quantum state from a dictionary, but only if a control register is 1. Use `qq.init(key, value)` to directly access the initialization facilities of `qq.reg`
 
-```
+```python
 v = {0:0.2, 1:0.4}
 ctrl = qq.reg([0,1])
 
@@ -343,40 +346,40 @@ To run a sequence of statements in reverse you can use `with qq.inv():`. For exa
 
 ```python
 
-# add 3 modulo 8
+# add 4 modulo 8
 n = 3
 
 x_prv = qq.reg([1,5,7])
 x = qq.reg(x_prv)
 x.qft(2**n)
-omega(3*x, n)
+omega(4*x, n)
 with qq.inv(): x.qft(2**n)
 
 qq.print(x_prv, x)
-# 1.0 4.0 w.p. 0.33333
-# 5.0 0.0 w.p. 0.33333
-# 7.0 2.0 w.p. 0.33333
+# 1.0 6.0 w.p. 0.33333
+# 5.0 1.0 w.p. 0.33333
+# 7.0 3.0 w.p. 0.33333
 ```
 
-Inversion interacts interestingly with `qq.reg` - the inverse of of `x = qq.reg(42)` is `x.clean(42)`. But if you only write `qq.reg` without a matching `clean`, then inverted `qq.reg` will deallocate ... what register?
+Inversion interacts interestingly with `qq.reg` - the inverse of of `x = qq.reg(42)` is `x.clean(42)`. But if you only write `qq.reg` without a matching `clean`, then inverted `qq.reg` will deallocate ... what register? You need to be really careful here.
 
 ```python
 x = qq.reg(0)
 
 with qq.inv():
-    y = qq.reg(3)
+    y = qq.reg(3) # uncompute register y
     x += y
-    y.clean(3)
+    y.clean(3)    # create register y
     
 qq.print(x)
 # -3.0 w.p. 1.0
 
 with qq.inv(): z = qq.reg(2)
 # raises SyntaxError -> attempted to read register that was never allocated.
-# z = qq.reg(2) is inverted to z.clean(2), but z is unallocated.
+# z = qq.reg(2) is inverted to z.clean(2), but z is unallocated so there is nothing to clean.
 ```
 
-So how does one uncompute garbage? This situation is unsatisfying because it encourages you to factor out your garbage registers as shown below. The quantum garbage collector makes this easier.
+So how does one uncompute garbage? This situation is unsatisfying because it encourages you to factor out your garbage registers as below. The quantum garbage collector makes this easier.
 
 ```python
 def do_thing(x, tmp):
@@ -561,7 +564,8 @@ tmp.clean(0)
 with qq.garbage():
     x = qq.reg(2)
     # crashes at end of scope! Not all keys were cleaned up!
-    
+   
+# this doesn't help...
 with qq.garbage():
     with qq.inv(): x = qq.reg(2)
 ```
