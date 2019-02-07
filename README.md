@@ -144,19 +144,22 @@ qq.print(x)
 # so the sign stays in superposition!
 ```
 
-Both `qq.measure` and `qq.print` utilize `qq.distribution`. This is convenient for plotting.
+Both `qq.measure` and `qq.print` utilize `qq.dist`. This is convenient for plotting.
 
 ```python
 x,y = qq.reg(range(10), range(1,10))
 
-values, probs, branches = qq.distribution(x % y)
+values, probs = qq.dist(x % y)
 
 # values[i] -> Measurement outcome: a float or a tuple of floats. Maybe strings.
 # probs[i] -> Measurement probability.
-# branches[i] -> List of superposition branches. Not that useful for users.
 
 import matplotlib.pyplot as plt
 plt.bar(values, probs)
+
+# or if you like one-liners
+plt.bar(*qq.dist(x % y))
+
 plt.show()
 ```
 

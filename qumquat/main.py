@@ -391,7 +391,7 @@ class Qumquat(object):
 
     ######################################## Measurement and printing
 
-    def distribution(self, *exprs):
+    def dist(self, *exprs, branches=False):
         def cast(ex):
             if isinstance(ex, str):
                 class Dummy():
@@ -434,13 +434,16 @@ class Qumquat(object):
         probs = [probs[i] for i in idxs]
         configs = [configs[i] for i in idxs]
 
-        return values, probs, configs
+        if branches:
+            return values, probs, configs
+        else:
+            return values, probs
 
     def measure(self, *var):
         if len(self.mode_stack) > 0:
             raise SyntaxError("Can only measure at top-level.")
 
-        values, probs, configs = self.distribution(*var)
+        values, probs, configs = self.dist(*var, branches=True)
 
         # pick outcome
         r = random()
@@ -486,7 +489,7 @@ class Qumquat(object):
     def print(self, *exprs):
         if self.queue_action('print', *exprs): return
 
-        values, probs, configs = self.distribution(*exprs)
+        values, probs, configs = self.dist(*exprs, branches=True)
         s = []
 
         # print distribution
@@ -924,5 +927,3 @@ class Qumquat(object):
     def assert_pile_clean_inv(self, key):
         if self.queue_action("assert_pile_clean_inv", key): return
         self.assert_pile_clean(key)
-
-
