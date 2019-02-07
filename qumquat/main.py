@@ -1,5 +1,5 @@
-from qvars import *
-from utils import Utils
+from .qvars import *
+from .utils import Utils
 from random import random
 import math, copy, cmath
 
@@ -9,7 +9,6 @@ class Qumquat(object):
     def __init__(self):
         self.utils = Utils(self)
 
-
     branches = [{"amp": 1+0j}]
 
     queue_stack = [] # list of list of action tuples
@@ -18,6 +17,10 @@ class Qumquat(object):
         if len(self.queue_stack) == 0: return False
         self.queue_stack[-1].append((action,data))
         return True
+
+    # forward to utils is needed
+    def __getattr__(self, name):
+        return getattr(self.utils, name)
 
     def call(self, tup, invert=False):
         if tup[0][:6] == "utils_":
@@ -921,9 +924,5 @@ class Qumquat(object):
     def assert_pile_clean_inv(self, key):
         if self.queue_action("assert_pile_clean_inv", key): return
         self.assert_pile_clean(key)
-
-
-import sys
-sys.modules[__name__] = Qumquat()
 
 

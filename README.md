@@ -7,6 +7,14 @@ Qumquat is an experimental high-level quantum programming language. This languag
  - These algorithms do not run on NISQ quantum computers, so **Qumquat never 'compiles' to quantum gates** or even explicitly stores qubits. Since the runtime will always be a classical simulation, infinite-dimensional quantum registers and quantum while loops are possible.
  - Simply implementing an algorithm is an excellent way of solidifying one's understanding and also to **ensure that the algorithm behaves as expected**. Qumquat is intended as an **educational tool for all levels of experience** in quantum computation.
 
+To install, clone into the git repository, then install using pip:
+```
+git clone git@github.com:patrickrall/Qumquat.git
+cd Qumquat
+pip install -e .
+```
+Then you can use `import qumquat as qq` anywhere.
+
 ### Quantum Registers
 
 Quantum registers are created with `qq.reg`. **Qumquat registers are always signed integers**.
