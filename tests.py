@@ -1,5 +1,5 @@
 import qumquat as qq
-from qvars import es_int
+from qumquat.qvars import es_int
 import matplotlib.pyplot as plt
 import math
 
@@ -406,7 +406,7 @@ def test_qram():
     d2 = [6,5,2,6,1]
     x = qq.reg([0,1,2])
 
-    qq.print(x, x.qram(d1), x.qram(d2))
+    qq.print(x, qq.qram(d1,x), qq.qram(d2,x))
 
 
 def test_rotY():

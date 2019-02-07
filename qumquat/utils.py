@@ -10,14 +10,18 @@ class Utils():
     ######################### Casting
 
     def int(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return int(expr)
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: es_int(expr.c(b))
         newexpr.float = False
         return newexpr
 
     def float(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return float(expr)
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: float(expr.c(b))
         newexpr.float = True
@@ -26,7 +30,9 @@ class Utils():
     ######################### Rounding
 
     def round(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return round(expr)
+            expr = Expression(expr, qq=self.qq)
         if not expr.float: return expr
 
         newexpr = Expression(expr)
@@ -35,7 +41,9 @@ class Utils():
         return newexpr
 
     def floor(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return floor(expr)
+            expr = Expression(expr, qq=self.qq)
         if not expr.float: return expr
 
         newexpr = Expression(expr)
@@ -44,7 +52,9 @@ class Utils():
         return newexpr
 
     def ceil(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return ceil(expr)
+            expr = Expression(expr, qq=self.qq)
         if not expr.float: return expr
 
         newexpr = Expression(expr)
@@ -56,49 +66,63 @@ class Utils():
     ######################### Trig, sqrt
 
     def sin(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.sin(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.sin(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def cos(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.cos(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.cos(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def tan(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.tan(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.tan(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def asin(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.asin(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.asin(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def acos(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.acos(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.acos(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def atan(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.atan(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.atan(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 
     def sqrt(self, expr):
-        if not isinstance(expr, Expression): expr = Expression(expr, qq=self.qq)
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.sqrt(float(expr))
+            expr = Expression(expr, qq=self.qq)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.sqrt(float(expr.c(b)))
         newexpr.float = True

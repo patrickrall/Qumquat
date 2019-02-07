@@ -216,22 +216,25 @@ class Qumquat(object):
 
             self.branches = newbranches
         elif isinstance(val, dict):
-            # check if dictionary has integer keys, and get norm
-            norm = 0
+            # check if dictionary has integer keys, cast values to expressions
             for k in val.keys():
                 if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
-                if not isinstance(val[k], float): raise TypeError("QRAM values must be integers.")
-                norm += abs(val[k])**2
+                val[k] = Expression(val[k], qq=self)
 
             newbranches = []
             goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
             for branch in self.branches:
                 if goodbranch(branch):
+
+                    norm = 0
+                    for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
+
                     for k in val.keys():
                         newbranch = copy.copy(branch)
                         newbranch[key.index()] = es_int(k)
-                        newbranch["amp"] *= val[k]/math.sqrt(norm)
-                        newbranches.append(newbranch)
+                        newbranch["amp"] *= float(val[k].c(branch))/math.sqrt(norm)
+                        if (abs(newbranch["amp"]) != 0):
+                            newbranches.append(newbranch)
                 else:
                     newbranches.append(branch)
 
@@ -244,7 +247,6 @@ class Qumquat(object):
     def init_inv(self, key, val):
         if self.queue_action('init_inv', key, val): return
         self.assert_mutable(key)
-
 
         if isinstance(val, range): val = list(val)
         if isinstance(val, Key): val = Expression(val)
@@ -327,64 +329,63 @@ class Qumquat(object):
 
         elif isinstance(val, dict):
             # check if dictionary has integer keys, and get norm
-            norm = 0
             for k in val.keys():
                 if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
-                if not isinstance(val[k], float): raise TypeError("QRAM values must be floats.")
-                norm += abs(val[k])**2
+                val[k] = Expression(val[k], qq=self)
 
             keys = list(val.keys())
 
+            # check if branches are equal except for key.index()
+            def branchesEqual(b1, b2):
+                for idx in self.branches[b1].keys():
+                    if idx == "amp": continue
+                    if idx == key.index(): continue
+                    if self.branches[b1][idx] != self.branches[b2][idx]:
+                        return False
+                return True
+
             untouchedbranches = []
             newbranches = []
-            for branch in self.branches:
-                if goodbranch(branch):
-                    if branch[key.index()] != val[keys[0]]: continue
 
-                    b = copy.copy(branch)
-                    b[key.index()] = es_int(0)
-                    newbranches.append(b)
+            checkbranches = [] # list of branch indexes unique up to key.index()
+            checkamplitudes = [] # factored amplitudes
+
+            for b in range(len(self.branches)):
+                branch = self.branches[b]
+                if goodbranch(branch):
+                    # if separable then branch should have this amplitude
+                    amp = branch["amp"]
+                    dict_amp = complex(val[int(branch[key.index()])].c(branch))
+                    if dict_amp == 0:
+                        raise ValueError("Failed to clean QRAM.")
+                    amp /= dict_amp
+                    norm = 0
+                    for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
+                    amp *= math.sqrt(norm)
+
+                    found = False
+                    i = 0
+                    while i < len(checkbranches):
+                        if branchesEqual(b, checkbranches[i]):
+                            if abs(checkamplitudes[i] - amp) > 1e-10:
+                                raise ValueError("Failed to clean QRAM.")
+                            found = True
+                            break
+                        i += 1
+
+                    if not found:
+                        checkbranches.append(b)
+                        checkamplitudes.append(amp)
+
+                        newb = copy.copy(branch)
+                        newb[key.index()] = es_int(0)
+                        newb["amp"] = amp
+                        newbranches.append(newb)
                 else:
                     untouchedbranches.append(branch)
 
-            if len(self.branches) != len(newbranches)*len(keys) + len(untouchedbranches):
-                raise ValueError("Failed to clean QRAM.")
-
-            # check if other list items match up
-            for i in range(1,len(keys)):
-                k = keys[i]
-                found = [] # list of indices in newbranches, where partners were found in branches
-                for branch in self.branches:
-                    if not goodbranch(branch): continue
-                    if branch[key.index()] != val[k]: continue
-
-                    matched = False
-                    for j in range(len(newbranches)):
-                        if j in found: continue
-
-                        good = True
-                        for ks in newbranches[j].keys():
-                            if ks == key.index(): continue
-                            if ks == "amp":
-                                if abs(newbranches[j][ks] - branch[ks]) > 1e-10:
-                                    good = False
-                                    break
-                            elif newbranches[j][ks] != branch[ks]:
-                                good = False
-                                break
-                        if good:
-                            found.append(j)
-                            matched = True
-                            break
-
-                    if not matched:
-                        raise ValueError("Failed to clean QRAM.")
-                if len(found) < len(newbranches):
-                    raise ValueError("Failed to clean QRAM.")
 
             self.branches = newbranches
-            for branch in self.branches:
-                branch["amp"] /= val[keys[0]]/math.sqrt(norm)
             self.branches += untouchedbranches
         else:
             raise TypeError("Invalid un-initialization of register with type ", type(val))
