@@ -397,8 +397,6 @@ class Key():
 
         return WrapPerp()
 
-
-
 ###################################################################
 
 # Holds onto lambda expressions that are functions of
