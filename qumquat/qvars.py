@@ -383,6 +383,21 @@ class Key():
     def clean(self, expr):
         self.qq.clean(self, expr)
 
+    def perp(self, val):
+
+        class WrapPerp():
+            def __enter__(s):
+                s.bit = self.qq.reg(0)
+                self.qq.perp_init(self,s.bit,val)
+                return Expression(s.bit)
+
+            def __exit__(s, *args):
+                self.qq.perp_init_inv(self,s.bit,val)
+                s.bit.clean(0)
+
+        return WrapPerp()
+
+
 
 ###################################################################
 

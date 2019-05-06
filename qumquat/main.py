@@ -78,13 +78,13 @@ class Qumquat(object):
         self.branches = [{"amp": 1+0j}]
 
     # get rid of branches with tiny amplitude
+    thresh = 1e-10
     def prune(self):
         newbranches = []
         norm = 0
-        thresh = 1e-10
 
         for branch in self.branches:
-            if abs(branch["amp"]) > thresh:
+            if abs(branch["amp"]) > self.thresh:
                 newbranches.append(branch)
                 norm += abs(branch["amp"])**2
         norm = cmath.sqrt(norm)
@@ -100,8 +100,6 @@ class Qumquat(object):
         if self.queue_action('alloc', key): return
         self.assert_mutable(key)
 
-        # print("alloc", key)
-
         reg = self.reg_count
         self.key_dict[key.key].append(reg)
         self.reg_count += 1
@@ -111,8 +109,6 @@ class Qumquat(object):
     def alloc_inv(self, key):
         if self.queue_action('alloc_inv', key): return
         self.assert_mutable(key)
-
-        # print("dealloc", key)
 
         if key.allocated():
             target = key
@@ -141,7 +137,6 @@ class Qumquat(object):
                     break
 
 
-
     ########################### User functions for making and deleting registers
 
     def reg(self, *vals):
@@ -150,8 +145,6 @@ class Qumquat(object):
 
             key = Key(self)
             out.append(key)
-
-            # print("newkey", key)
 
             if len(self.garbage_stack) > 0:
                 gkey = self.garbage_stack[-1]
@@ -171,6 +164,8 @@ class Qumquat(object):
         self.init_inv(key, val)
         self.alloc_inv(key)
 
+    def expr(self, val):
+        return Expression(val, self)
 
     ############################ Initialization
 
@@ -228,6 +223,7 @@ class Qumquat(object):
 
                     norm = 0
                     for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
+                    if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
 
                     for k in val.keys():
                         newbranch = copy.copy(branch)
@@ -361,6 +357,7 @@ class Qumquat(object):
                     amp /= dict_amp
                     norm = 0
                     for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
+                    if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
                     amp *= math.sqrt(norm)
 
                     found = False
@@ -389,6 +386,339 @@ class Qumquat(object):
             self.branches += untouchedbranches
         else:
             raise TypeError("Invalid un-initialization of register with type ", type(val))
+
+    # sets orth to 1 if key is perpendicular to val, 0 otherwise
+    def perp_init(self, key, orth, val):
+        if self.queue_action('perp_init', key, orth, val): return
+        self.assert_mutable(orth)
+
+        for branch in self.controlled_branches():
+            if branch[orth.index()] != 0: raise ValueError("Register already initialized!")
+
+        if isinstance(val, range): val = list(val)
+        if isinstance(val, Key): val = Expression(val)
+        if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
+
+        def branchesEqual(b1, b2):
+            for key in b1.keys():
+                if key == "amp": continue
+                if b1[key] != b2[key]: return False
+            return True
+
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        if isinstance(val, Expression):
+            if val.float: raise TypeError("Can only reflect around integers")
+            for branch in self.controlled_branches():
+                branch[orth.index()] = es_int(branch[key.index()] != val.c(branch))
+
+        elif isinstance(val, list):
+            # check list for validity
+            for i in range(len(val)):
+                if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
+                    raise TypeError("Superpositions only support integer literals.")
+                if val.index(val[i]) != i:
+                    raise ValueError("Superpositions can't contain repeated values.")
+            N = len(val)
+
+            # can superpositions support expressions? Not at the moment....
+
+            newbranches = []
+            for branch in self.branches:
+                if not goodbranch(branch):
+                    newbranches.append(branch)
+                    continue
+
+                # if key is not in the list always flip
+                found = False
+                for i in range(N):
+                    if branch[key.index()] == val[i]:
+                        found = True
+                        break
+
+                if not found:
+                    branch[orth.index()] = es_int(1)
+                    newbranches.append(branch)
+                    continue
+
+                # key is in superposition: need to create 2*N branches
+                for j in range(N):
+                    amp0 = 0j
+                    amp1 = 0j
+
+                    for i in range(N):
+                        if branch[key.index()] == val[i]:
+                            amp0 += branch["amp"]/N
+                            amp1 += branch["amp"]*((1 if i==j else 0)-1/N)
+
+                    br0 = copy.deepcopy(branch)
+                    br0["amp"] = amp0
+                    br0[key.index()] = val[j]
+
+                    br1 = copy.deepcopy(branch)
+                    br1["amp"] = amp1
+                    br1[key.index()] = val[j]
+                    br1[orth.index()] = es_int(1)
+
+                    def insertBranch(br):
+                        found = False
+                        for newbranch in newbranches:
+                            if branchesEqual(br,newbranch):
+                                newbranch["amp"] += br["amp"]
+                                found = True
+                                break
+                        if not found:
+                            newbranches.append(br)
+                    insertBranch(br0)
+                    insertBranch(br1)
+
+            self.branches = newbranches
+            self.prune()
+
+        elif isinstance(val, dict):
+            # check if dictionary has integer keys, cast values to expressions
+            for k in val.keys():
+                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+                val[k] = Expression(val[k], qq=self)
+                if key.key in val[k].keys or orth.key in val[k].keys:
+                    raise SyntaxError("Can't measure target with state that depends on target.")
+
+            newbranches = []
+            for branch in self.branches:
+                if not goodbranch(branch):
+                    newbranches.append(branch)
+                    continue
+
+                norm = 0j
+                for k in val.keys():
+                    norm += abs(complex(val[k].c(branch)))**2
+                if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
+
+                # if key is not in the list always flip
+                found = False
+                for k in val.keys():
+                    if branch[key.index()] == k:
+                        found = True
+                        break
+
+                if not found:
+                    branch[orth.index()] = es_int(1)
+                    newbranches.append(branch)
+                    continue
+
+                for k1 in val.keys():
+                    amp0 = 0j
+                    amp1 = 0j
+
+                    for k2 in val.keys():
+                        if branch[key.index()] == k2:
+                            proj = complex(val[k2].c(branch))*complex(val[k1].c(branch)).conjugate()/norm
+                            amp0 += branch["amp"]*proj
+                            amp1 += branch["amp"]*((1 if k1==k2 else 0)-proj)
+
+                    br0 = copy.deepcopy(branch)
+                    br0["amp"] = amp0
+                    br0[key.index()] = k1
+
+                    br1 = copy.deepcopy(branch)
+                    br1["amp"] = amp1
+                    br1[key.index()] = k1
+                    br1[orth.index()] = es_int(1)
+
+                    def insertBranch(br):
+                        found = False
+                        for newbranch in newbranches:
+                            if branchesEqual(br,newbranch):
+                                newbranch["amp"] += br["amp"]
+                                found = True
+                                break
+                        if not found:
+                            newbranches.append(br)
+                    insertBranch(br0)
+                    insertBranch(br1)
+
+            self.branches = newbranches
+            self.prune()
+        else:
+            raise TypeError("Invalid initialization of perpendicular register with type ", type(val))
+
+
+    def perp_init_inv(self, key, orth, val):
+        if self.queue_action('perp_init_inv', key, orth, val): return
+        self.assert_mutable(key)
+
+        if isinstance(val, range): val = list(val)
+        if isinstance(val, Key): val = Expression(val)
+        if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
+
+        def branchesEqual(b1, b2):
+            for key in b1.keys():
+                if key == "amp": continue
+                if b1[key] != b2[key]: return False
+            return True
+
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        if isinstance(val, Expression):
+            if val.float: raise TypeError("Can only reflect around integers")
+            for branch in self.branches:
+                if goodbranch(branch): target = es_int(branch[key.index()] != val.c(branch))
+                else: target = 0
+
+                if branch[orth.index()] != target:
+                    raise ValueError("Failed to uncompute perpendicular bit.")
+
+                branch[key.index()] = es_int(0)
+
+        elif isinstance(val, list):
+            # check list for validity
+            for i in range(len(val)):
+                if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
+                    raise TypeError("Superpositions only support integer literals.")
+                if val.index(val[i]) != i:
+                    raise ValueError("Superpositions can't contain repeated values.")
+            N = len(val)
+
+            newbranches = []
+            for branch in self.branches:
+                if not goodbranch(branch):
+                    if branch[orth.index()] != 0:
+                        raise ValueError("Failed to uncompute perpendicular bit.")
+
+                    newbranches.append(branch)
+                    continue
+
+                # if key is not in the list always flip
+                found = False
+                for i in range(N):
+                    if branch[key.index()] == val[i]:
+                        found = True
+                        break
+
+                if not found:
+                    if branch[orth.index()] != 1:
+                        raise ValueError("Failed to uncompute perpendicular bit.")
+
+                    branch[orth.index()] = es_int(0)
+                    newbranches.append(branch)
+                    continue
+
+                # key is in superposition: need to create 2*N branches
+                for j in range(N):
+                    amp0 = 0j
+                    amp1 = 0j
+
+                    for i in range(N):
+                        if branch[key.index()] == val[i]:
+                            amp0 += branch["amp"]/N
+                            amp1 += branch["amp"]*((1 if i==j else 0)-1/N)
+
+                    br0 = copy.deepcopy(branch)
+                    br0["amp"] = amp0
+                    br0[key.index()] = val[j]
+
+                    br1 = copy.deepcopy(branch)
+                    br1["amp"] = amp1
+                    br1[key.index()] = val[j]
+                    br1[orth.index()] = 1-br1[orth.index()]
+
+                    def insertBranch(br):
+                        found = False
+                        for newbranch in newbranches:
+                            if branchesEqual(br,newbranch):
+                                newbranch["amp"] += br["amp"]
+                                found = True
+                                break
+                        if not found:
+                            newbranches.append(br)
+                    insertBranch(br0)
+                    insertBranch(br1)
+
+            self.branches = newbranches
+            self.prune()
+
+            for branch in self.branches:
+                if branch[orth.index()] != 0:
+                    raise ValueError("Failed to uncompute perpendicular bit.")
+
+        elif isinstance(val, dict):
+            # check if dictionary has integer keys, cast values to expressions
+            for k in val.keys():
+                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+                val[k] = Expression(val[k], qq=self)
+                if key.key in val[k].keys or orth.key in val[k].keys:
+                    raise SyntaxError("Can't measure target with state that depends on target.")
+
+            newbranches = []
+            for branch in self.branches:
+                if not goodbranch(branch):
+                    if branch[orth.index()] != 0:
+                        raise ValueError("Failed to uncompute perpendicular bit.")
+
+                    newbranches.append(branch)
+                    continue
+
+                norm = 0j
+                for k in val.keys():
+                    norm += abs(complex(val[k].c(branch)))**2
+                if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
+
+                # if key is not in the list always flip
+                found = False
+                for k in val.keys():
+                    if branch[key.index()] == k:
+                        found = True
+                        break
+
+                if not found:
+                    if branch[orth.index()] != 1:
+                        raise ValueError("Failed to uncompute perpendicular bit.")
+
+                    branch[orth.index()] = es_int(0)
+                    newbranches.append(branch)
+                    continue
+
+                for k1 in val.keys():
+                    amp0 = 0j
+                    amp1 = 0j
+
+                    for k2 in val.keys():
+                        if branch[key.index()] == k2:
+                            proj = complex(val[k2].c(branch))*complex(val[k1].c(branch)).conjugate()/norm
+                            amp0 += branch["amp"]*proj
+                            amp1 += branch["amp"]*((1 if k1==k2 else 0)-proj)
+
+                    br0 = copy.deepcopy(branch)
+                    br0["amp"] = amp0
+                    br0[key.index()] = k1
+
+                    br1 = copy.deepcopy(branch)
+                    br1["amp"] = amp1
+                    br1[key.index()] = k1
+                    br1[orth.index()] = 1-br1[orth.index()]
+
+                    def insertBranch(br):
+                        found = False
+                        for newbranch in newbranches:
+                            if branchesEqual(br,newbranch):
+                                newbranch["amp"] += br["amp"]
+                                found = True
+                                break
+                        if not found:
+                            newbranches.append(br)
+                    insertBranch(br0)
+                    insertBranch(br1)
+
+            self.branches = newbranches
+            self.prune()
+
+            for branch in self.branches:
+                if branch[orth.index()] != 0:
+                    raise ValueError("Failed to uncompute perpendicular bit.")
+
+            pass
+
+        else:
+            raise TypeError("Invalid un-initialization of perpendicular register with type ", type(val))
+
 
     ######################################## Measurement and printing
 
@@ -486,6 +816,188 @@ class Qumquat(object):
 
         return float(prob)
 
+    def measure_state(self, key, val, postselect=None):
+        if len(self.mode_stack) > 0:
+            raise SyntaxError("Can only measure at top-level.")
+
+        self.assert_mutable(key)
+
+        if isinstance(val, range): val = list(val)
+        if isinstance(val, Key): val = Expression(val)
+        if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
+
+        def branchesEqual(b1, b2):
+            for key in b1.keys():
+                if key == "amp": continue
+                if b1[key] != b2[key]: return False
+            return True
+
+        if isinstance(val, Expression):
+            if val.float: raise TypeError("Quantum registers can only contain ints")
+            if key.key in val.keys:
+                raise SyntaxError("Can't measure target with state that depends on target.")
+
+            prob = 0
+            for branch in self.branches:
+                if branch[key.index()] == val.c(branch):
+                    prob += abs(branch["amp"])**2
+
+            if postselect is None:
+                outcome = random() < prob
+            else:
+                if postselect and prob < self.thresh: raise ValueError("Postselection failed!")
+                if not postselect and prob > 1-self.thresh: raise ValueError("Postselection failed!")
+                outcome = postselect
+
+            newbranches = []
+            for branch in self.branches:
+                if (branch[key.index()] == val.c(branch)) == outcome:
+                    newbranches.append(branch)
+
+            if not outcome: prob = 1-prob
+            self.branches = newbranches
+            for branch in self.branches:
+                branch["amp"] /= math.sqrt(prob)
+
+        elif isinstance(val, list):
+            # check list for validity
+            for i in range(len(val)):
+                if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
+                    raise TypeError("Superpositions only support integer literals.")
+                if val.index(val[i]) != i:
+                    raise ValueError("Superpositions can't contain repeated values.")
+
+            N = len(val)
+            prob = 0j
+            # is there a faster way?
+            for b1 in self.branches:
+                for b2 in self.branches:
+                    for i in range(N):
+                        for j in range(N):
+                            if b1[key.index()] == val[i] and b2[key.index()] == val[j]:
+                                prob += b1["amp"]*b2["amp"].conjugate()
+            prob = prob.real
+            prob /= N
+
+            if postselect is None:
+                outcome = random() < prob
+            else:
+                if postselect and prob < self.thresh: raise ValueError("Postselection failed!")
+                if not postselect and prob > 1-self.thresh: raise ValueError("Postselection failed!")
+                outcome = postselect
+
+            newbranches = []
+            for branch in self.branches:
+                for j in range(N):
+                    amp = 0j
+                    for i in range(N):
+                        if branch[key.index()] == val[i]:
+                            if outcome: amp += branch["amp"]/N
+                            else: amp += branch["amp"]*((1 if i==j else 0)-1/N)
+
+                    if amp == 0: continue
+
+                    br = copy.deepcopy(branch)
+                    br["amp"] = amp
+                    br[key.index()] = val[j]
+
+                    found = False
+                    for newbranch in newbranches:
+                        if branchesEqual(br,newbranch):
+                            newbranch["amp"] += br["amp"]
+                            found = True
+                            break
+                    if not found:
+                        newbranches.append(br)
+
+            if not outcome: prob = 1-prob
+            self.branches = newbranches
+            for branch in self.branches:
+                branch["amp"] /= math.sqrt(prob)
+
+            self.prune()
+
+        elif isinstance(val, dict):
+            # check if dictionary has integer keys, cast values to expressions
+            controls = set([])
+
+            for k in val.keys():
+                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+                val[k] = Expression(val[k], qq=self)
+                if key.key in val[k].keys:
+                    raise SyntaxError("Can't measure target with state that depends on target.")
+                controls |= val[k].keys
+
+            prob = 0j
+            # is there a faster way?
+            for b1 in self.branches:
+                for b2 in self.branches:
+                    good = True
+                    for k in controls:
+                        if b1[k] != b2[k]:
+                            good = False
+                            break
+                    if good:
+                        norm = 0j
+                        for k in val.keys():
+                            norm += abs(complex(val[k].c(b1)))**2
+                        if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
+
+                        for k1 in val.keys():
+                            for k2 in val.keys():
+                                if b1[key.index()] == k1 and b2[key.index()] == k2:
+                                    prob += b1["amp"]*b2["amp"].conjugate()*\
+                                            complex(val[k2].c(b1))*complex(val[k1].c(b1)).conjugate()/norm
+            prob = prob.real
+
+            if postselect is None:
+                outcome = random() < prob
+            else:
+                if postselect and prob < self.thresh: raise ValueError("Postselection failed!")
+                if not postselect and prob > 1-self.thresh: raise ValueError("Postselection failed!")
+                outcome = postselect
+
+            newbranches = []
+            for branch in self.branches:
+                norm = 0j
+                for k in val.keys():
+                    norm += abs(complex(val[k].c(b1)))**2
+
+                for k1 in val.keys():
+                    amp = 0j
+                    for k2 in val.keys():
+                        if branch[key.index()] == k2:
+                            proj = complex(val[k2].c(branch))*complex(val[k1].c(branch)).conjugate()/norm
+                            if outcome: amp += branch["amp"]*proj
+                            else: amp += branch["amp"]*((1 if k1==k2 else 0)-proj)
+
+                    if amp == 0: continue
+
+                    br = copy.deepcopy(branch)
+                    br["amp"] = amp
+                    br[key.index()] = k1
+
+                    found = False
+                    for newbranch in newbranches:
+                        if branchesEqual(br,newbranch):
+                            newbranch["amp"] += br["amp"]
+                            found = True
+                            break
+                    if not found:
+                        newbranches.append(br)
+
+            if not outcome: prob = 1-prob
+            self.branches = newbranches
+            for branch in self.branches:
+                branch["amp"] /= math.sqrt(prob)
+
+            self.prune()
+
+        else:
+            raise TypeError("Invalid state measurement with type ", type(val))
+
+        if postselect: return prob
+        return outcome
 
     def print(self, *exprs):
         if self.queue_action('print', *exprs): return
