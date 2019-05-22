@@ -334,7 +334,7 @@ class Key():
     ######################### Irreversible operations
 
     def assert_garbage(self, op):
-        if len(self.qq.garbage_stack) == 0:
+        if len(self.qq.pile_stack_py) == 0:
             raise SyntaxError("Need garbage collector to perform irreversible operation "+op+".")
 
     def assign(self, value):

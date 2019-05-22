@@ -64,13 +64,3 @@ class Garbage:
 
         # self.do_garbage(rev_queue, pile, key)
         self.do_garbage(rev_queue, pile)
-
-    def assert_pile_clean(self, key):
-        if self.queue_action("assert_pile_clean", key): return
-        if key not in self.garbage_piles: return
-        if len(self.garbage_piles[key]) == 0: return
-        raise ValueError("Garbage pile '"+key+"' is not clean.")
-
-    def assert_pile_clean_inv(self, key):
-        if self.queue_action("assert_pile_clean_inv", key): return
-        self.assert_pile_clean(key)
