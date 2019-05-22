@@ -70,7 +70,7 @@ class es_int(object):
     # For example: for i in range(-1, len(x)): print(x)
     def __len__(self):
         i = 0
-        while 2**i < self.mag: i += 1
+        while 2**i <= self.mag: i += 1
         return i
 
     def __bool__(self):
@@ -148,10 +148,17 @@ class Key():
     def allocated(self):
         return len(self.qq.key_dict[self.key]) > 0
 
+    # for debug - print short identifying string
     def short(self):
         status = "u"
         if self.allocated(): status = "a"
         return str(self.key)+status
+
+    def pile(self):
+        for pile in self.qq.pile_stack_qq:
+            if any([self.key == key.key for key in pile]):
+                return pile
+        return None
 
     def partner(self):
         if self.allocated(): return self
@@ -159,13 +166,9 @@ class Key():
             if self.partnerCache is not None:
                 return self.partnerCache
 
-            if len(self.qq.pile_stack) == 0:
-                raise SyntaxError("Attempted to read un-allocated key (no gc).")
-
-            pile = self.qq.pile_stack[-1]
-
-            # print the current garbage pile. very handy for debug.
-            # print("pile", [key.short() for key in pile])
+            pile = self.pile()
+            if pile is None:
+                raise SyntaxError("Attempted to read un-allocated key.")
 
             i = 0 # partner index
             for key in pile:
@@ -175,8 +178,6 @@ class Key():
 
             if not pile[i].allocated():
                 raise SyntaxError("Garbage collector error: ran out of registers to uncompute.")
-
-            # print("identified partner:",self.key,"->",pile[i].key)
 
             self.partnerCache = pile[i]
             return pile[i]

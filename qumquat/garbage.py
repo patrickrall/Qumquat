@@ -4,79 +4,66 @@ class Garbage:
 
     ################### Garbage
 
-    # https://python-3-patterns-idioms-test.readthedocs.io/en/latest/PythonDecorators.html
-    # What a mess: a class that can be both a with wrapper and a decorator,
-    # and the decorator supports arguments AND no arguments
-
-    def garbage(self, *keys):
-        if len(keys) == 0:
-            key = "keyless"
-        else:
-            key = keys[0]
-            if key == "keyless":
-                raise SyntaxError("'keyless' is a reserved garbage pile key.")
+    # a decorator that makes function into a with statement
+    def garbage(self, f):
 
         class WrapGarbage():
-            def enter(s):
-                self.garbage_stack.append(key)
-                if key == "keyless":
-                    self.garbage_piles["keyless"].append([])
-                else:
+            def __init__(s, *args, **kwargs):
+                s.args = args
+                s.kwargs = kwargs
 
-                    if key not in self.garbage_piles:
-                        self.garbage_piles[key] = []
-
+            def __enter__(s):
                 self.queue_stack.append([])
+                self.pile_stack_py.append([])
 
-            def exit(s):
+                out = f(*s.args, **s.kwargs)
+
+                s.pile = self.pile_stack_py.pop()
+
+                return out
+
+            def __exit__(s, ty,val,tr): # ignore exception stuff
+                self.pile_stack_py.append(s.pile)
+
+                with self.inv(): f(*s.args, **s.kwargs)
+
+                pile = self.pile_stack_py.pop()
+
                 queue = self.queue_stack.pop()
 
-                if key == "keyless":
-                    pile = self.garbage_piles["keyless"].pop()
-                else:
-                    pile = self.garbage_piles[key]
-
-                self.garbage_stack.pop()
-                self.do_garbage(queue, pile, key)
-
-            def __call__(s, f):
-                def wrapped(*args):
-                    s.enter()
-                    out = f(*args)
-                    s.exit()
-                    return out
-
-                return wrapped
-
-            def __enter__(s): s.enter()
-
-            def __exit__(s, *args): s.exit()
+                self.do_garbage(queue, pile)
 
 
-        return WrapGarbage()
+        def wrapper(*args,**kwargs):
+            return WrapGarbage(*args,**kwargs)
 
+        return wrapper
 
-    def do_garbage(self, queue, pile, key):
-        if self.queue_action("do_garbage", queue, pile, key): return
+    def do_garbage(self, queue, pile):
+        if self.queue_action("do_garbage", queue, pile): return
 
-        self.pile_stack.append(pile)
+        self.pile_stack_qq.append(pile)
 
         for tup in queue: self.call(tup)
+        newpile = self.pile_stack_qq.pop()
 
-        if key=="keyless" and len(pile) > 0:
-            raise SyntaxError("Keyless garbage pile terminated non-empty.")
+        #if key=="keyless" and len(pile) > 0:
+        if len(newpile) > 0:
+            raise SyntaxError("Garbage collector error: pile was not clean after uncomputation.")
 
-        self.pile_stack.pop()
 
-
-    def do_garbage_inv(self, queue, pile, key):
-        if self.queue_action("do_garbage_inv", queue, pile, key): return
+    def do_garbage_inv(self, queue, pile):
+        if self.queue_action("do_garbage_inv", queue, pile): return
 
         self.queue_stack.append([]) # just reverse the queue
         for tup in queue[::-1]: self.call(tup, invert=True)
         rev_queue = self.queue_stack.pop()
 
-        self.do_garbage(rev_queue, pile, key)
+        # also reverse the pile
+        pile = pile[::-1]
+
+        # self.do_garbage(rev_queue, pile, key)
+        self.do_garbage(rev_queue, pile)
 
     def assert_pile_clean(self, key):
         if self.queue_action("assert_pile_clean", key): return

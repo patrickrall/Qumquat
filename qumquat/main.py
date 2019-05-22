@@ -59,9 +59,8 @@ class Qumquat(Keys, Init, Measure, Control, Primitive, Perp, Utils, Snapshots, G
     reg_count = 0
     key_dict = {} # dictionary of registers for each key
 
-    pile_stack = []  # lookup table for indices
-    garbage_piles = {"keyless": []}  # storage for keyed garbage piles
-    garbage_stack = []
+    pile_stack_py = [] # stack during python run time
+    pile_stack_qq = [] # stack during qq execution
 
     thresh = 1e-10 # threshold for deleting tiny amplitudes
 
