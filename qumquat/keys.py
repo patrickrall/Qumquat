@@ -16,25 +16,40 @@ class Keys:
     # delete all variables and start anew
     def clear(self):
         if len(self.controls) > 0 or len(self.queue_stack) > 0 or\
-                len(self.garbage_stack) > 0 or len(self.mode_stack) > 0:
+                len(self.pile_stack_py) > 0 or len(self.mode_stack) > 0:
             raise SyntaxError("Cannot clear inside quantum control flow.")
 
         self.key_dict = {}
-
-        self.pile_stack = []
-        self.garbage_piles = {"keyless": []}
-        self.garbage_stack = []
         self.branches = [{"amp": 1+0j}]
 
     # get rid of branches with tiny amplitude
+    # merge branches with same values
     def prune(self):
-        newbranches = []
         norm = 0
 
+        mergedbranches = []
         for branch in self.branches:
+            found = False
+            for comp_branch in mergedbranches:
+                same = True
+                for key in branch.keys():
+                    if key == "amp": continue
+                    if branch[key] != comp_branch[key]:
+                        same = False
+                        break
+                if same:
+                    found = True
+                    comp_branch["amp"] += branch["amp"]
+
+            if not found: mergedbranches.append(branch)
+
+        newbranches = []
+        for branch in mergedbranches:
             if abs(branch["amp"]) > self.thresh:
                 newbranches.append(branch)
-                norm += abs(branch["amp"])**2
+
+        for branch in newbranches:
+            norm += abs(branch["amp"])**2
         norm = cmath.sqrt(norm)
 
         self.branches = newbranches
@@ -48,8 +63,11 @@ class Keys:
         if self.queue_action('alloc', key): return
         self.assert_mutable(key)
 
+        if key.allocated():
+            raise SyntaxError("Attempted to allocate already allocated key.")
+
         reg = self.reg_count
-        self.key_dict[key.key].append(reg)
+        self.key_dict[key.key] = reg
         self.reg_count += 1
 
         for branch in self.branches: branch[reg] = es_int(0)
@@ -66,9 +84,12 @@ class Keys:
             target = key.partner()
             proxy = key
 
+        for branch in self.controlled_branches():
+            if branch[target.index()] != 0: raise ValueError("Failed to clean register.")
+
         # remove the register from the branches and key_dict
         for branch in self.branches: branch.pop(target.index())
-        self.key_dict[target.key].remove(target.index())
+        self.key_dict[target.key] = None
 
         pile = key.pile()
 
@@ -99,7 +120,7 @@ class Keys:
                 self.pile_stack_py[-1].append(key)
 
             self.alloc(key)
-            self.init(key, val)
+            key.init(val)
 
         if len(out) > 1: return tuple(out)
         else: return out[0]
@@ -107,6 +128,9 @@ class Keys:
 
     def clean(self, key, val):
         self.init_inv(key, val)
+
+
+
         self.alloc_inv(key)
 
     def expr(self, val):

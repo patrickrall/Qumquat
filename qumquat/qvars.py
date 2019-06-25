@@ -113,6 +113,10 @@ class es_int(object):
 
     def __round__(self): return self
 
+    # hashable
+    def __hash__(self):
+        return self.mag*2 + (1 if self.sign == 1 else 0)
+
 
 #####################################
 
@@ -132,10 +136,12 @@ def irrevError(x, cond, path):
 class Key():
     def __init__(self, qq, val=None):
         self.qq = qq
+
+
         if val is None:
             self.key = qq.key_count
             qq.key_count += 1
-            qq.key_dict[self.key] = []
+            qq.key_dict[self.key] = None
         else:
             self.key = val
         self.partnerCache = None
@@ -146,7 +152,7 @@ class Key():
         return "<Qumquat Key: "+str(self.key)+", "+status+">"
 
     def allocated(self):
-        return len(self.qq.key_dict[self.key]) > 0
+        return self.qq.key_dict[self.key] is not None
 
     # for debug - print short identifying string
     def short(self):
@@ -188,7 +194,7 @@ class Key():
             partner = self.partner()
             return self.partner().index()
 
-        return self.qq.key_dict[self.key][-1]
+        return self.qq.key_dict[self.key]
 
     ############################ operations (a + b) forward to expressions
 
@@ -232,8 +238,6 @@ class Key():
     def __rrshift__(self, expr): return expr >> Expression(self)
 
 
-
-
     def __complex__(self): return complex(Expression(self))
     def __int__(self): return int(Expression(self))
     def __float__(self): return float(Expression(self))
@@ -246,15 +250,18 @@ class Key():
     def __gt__(self, expr): return Expression(self) > expr
     def __ge__(self, expr): return Expression(self) >= expr
     def __eq__(self, expr): return Expression(self) == expr
+    def __ne__(self, expr): return Expression(self) != expr
 
-    def round(self): Expression(self).round()
-    def floor(self): Expression(self).floor()
-    def ceil(self): Expression(self).ceil()
+    # Use qq.round(expr), etc.
+    # def round(self): Expression(self).round()
+    # def floor(self): Expression(self).floor()
+    # def ceil(self): Expression(self).ceil()
 
     ##################################  statements (a += b) forward to qq.op()
 
     def __iadd__(self, expr):
         expr = Expression(expr, self.qq)
+        if expr.float: raise ValueError("Can't add float to register.")
         do = lambda b: b[self.index()] + expr.c(b)
         undo = lambda b: b[self.index()] - expr.c(b)
         self.qq.oper(self, expr, do, undo)
@@ -262,6 +269,7 @@ class Key():
 
     def __isub__(self, expr):
         expr = Expression(expr, self.qq)
+        if expr.float: raise ValueError("Can't subtract float from register.")
         do = lambda b: b[self.index()] - expr.c(b)
         undo = lambda b: b[self.index()] + expr.c(b)
         self.qq.oper(self, expr, do, undo)
@@ -270,6 +278,7 @@ class Key():
     def __imul__(self, expr):
         path = callPath()
         expr = Expression(expr, self.qq)
+        if expr.float: raise ValueError("Can't multiply register by float.")
         do = lambda b: b[self.index()] * irrevError(expr.c(b), expr.c(b) == 0, path)
         undo = lambda b: irrevError(b[self.index()] // expr.c(b), b[self.index()] % expr.c(b) != 0, path)
         self.qq.oper(self, expr, do, undo)
@@ -384,16 +393,26 @@ class Key():
     def clean(self, expr):
         self.qq.clean(self, expr)
 
+    def init(self, val):
+        self.qq.init(self, val)
+
     def perp(self, val):
 
         class WrapPerp():
             def __enter__(s):
                 s.bit = self.qq.reg(0)
-                self.qq.perp_init(self,s.bit,val)
+
+                with self.qq.inv(): self.init(val)
+                with self.qq.control(self != 0): s.bit += 1
+                self.init(val)
+
                 return Expression(s.bit)
 
             def __exit__(s, *args):
-                self.qq.perp_init_inv(self,s.bit,val)
+                with self.qq.inv(): self.init(val)
+                with self.qq.control(self != 0): s.bit -= 1
+                self.init(val)
+
                 s.bit.clean(0)
 
         return WrapPerp()
@@ -405,7 +424,6 @@ class Key():
 
 class Expression(object):
     def __init__(self, val, qq=None):
-
         if isinstance(val, Expression):
             self.keys = val.keys
             self.c = val.c

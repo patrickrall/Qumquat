@@ -32,7 +32,7 @@ class Utils:
 
     def round(self, expr):
         if not isinstance(expr, Expression):
-            if not isinstance(expr, Key): return round(expr)
+            if hasattr(expr, "__round__"): return round(expr)
             expr = Expression(expr, qq=self)
         if not expr.float: return expr
 
@@ -43,7 +43,7 @@ class Utils:
 
     def floor(self, expr):
         if not isinstance(expr, Expression):
-            if not isinstance(expr, Key): return floor(expr)
+            if hasattr(expr, "__floor__"): return floor(expr)
             expr = Expression(expr, qq=self)
         if not expr.float: return expr
 
@@ -54,7 +54,7 @@ class Utils:
 
     def ceil(self, expr):
         if not isinstance(expr, Expression):
-            if not isinstance(expr, Key): return ceil(expr)
+            if hasattr(expr, "__ceil__"): return ceil(expr)
             expr = Expression(expr, qq=self)
         if not expr.float: return expr
 
@@ -126,6 +126,15 @@ class Utils:
             expr = Expression(expr, qq=self)
         newexpr = Expression(expr)
         newexpr.c = lambda b: math.sqrt(float(expr.c(b)))
+        newexpr.float = True
+        return newexpr
+
+    def exp(self, expr):
+        if not isinstance(expr, Expression):
+            if not isinstance(expr, Key): return math.exp(float(expr))
+            expr = Expression(expr, qq=self)
+        newexpr = Expression(expr)
+        newexpr.c = lambda b: math.exp(float(expr.c(b)))
         newexpr.float = True
         return newexpr
 

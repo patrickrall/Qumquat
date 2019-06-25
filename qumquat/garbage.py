@@ -7,16 +7,40 @@ class Garbage:
     # a decorator that makes function into a with statement
     def garbage(self, f):
 
-        class WrapGarbage():
+        class WrapGarbage(Expression):
             def __init__(s, *args, **kwargs):
                 s.args = args
                 s.kwargs = kwargs
+                s.called = False
+                s.compute = None
+
+                s.keys = set([])
+                for arg in list(args) + list(kwargs.values()):
+                    if isinstance(arg, Expression):
+                        s.keys |= arg.keys
+                    if isinstance(arg, Key):
+                        s.keys |= set([arg.key])
+
+                def run_without_garbage(b):
+                    if not s.called:
+                        s.called = True
+                        out = Expression(f(*s.args, **s.kwargs))
+                        s.compute = out.c
+
+                    return s.compute(b)
+
+                s.c = lambda b: run_without_garbage(b)
+                s.float = True # can't be determined now, assume the worst.
+                s.qq = self
+
 
             def __enter__(s):
+                if s.called:
+                    raise SyntaxError("Function was already evaluated previously - use in with statement at first function call.")
                 self.queue_stack.append([])
                 self.pile_stack_py.append([])
 
-                out = f(*s.args, **s.kwargs)
+                out = Expression(f(*s.args, **s.kwargs))
 
                 s.pile = self.pile_stack_py.pop()
 
@@ -33,7 +57,6 @@ class Garbage:
 
                 self.do_garbage(queue, pile)
 
-
         def wrapper(*args,**kwargs):
             return WrapGarbage(*args,**kwargs)
 
@@ -47,7 +70,6 @@ class Garbage:
         for tup in queue: self.call(tup)
         newpile = self.pile_stack_qq.pop()
 
-        #if key=="keyless" and len(pile) > 0:
         if len(newpile) > 0:
             raise SyntaxError("Garbage collector error: pile was not clean after uncomputation.")
 
@@ -62,5 +84,4 @@ class Garbage:
         # also reverse the pile
         pile = pile[::-1]
 
-        # self.do_garbage(rev_queue, pile, key)
         self.do_garbage(rev_queue, pile)

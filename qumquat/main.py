@@ -9,7 +9,6 @@ from .measure import Measure
 from .control import Control
 from .garbage import Garbage
 from .primitive import Primitive
-from .perp import Perp
 from .utils import Utils
 from .snapshots import Snapshots
 
@@ -21,7 +20,7 @@ from .snapshots import Snapshots
 # - pile_stack, garbage_piles, garbage_stack
 # - push_mode, pop_mode, mode_stack
 
-class Qumquat(Keys, Init, Measure, Control, Primitive, Perp, Utils, Snapshots, Garbage):
+class Qumquat(Keys, Init, Measure, Control, Primitive, Utils, Snapshots, Garbage):
     branches = [{"amp": 1+0j}]
 
     queue_stack = [] # list of list of action tuples
@@ -62,7 +61,9 @@ class Qumquat(Keys, Init, Measure, Control, Primitive, Perp, Utils, Snapshots, G
     pile_stack_py = [] # stack during python run time
     pile_stack_qq = [] # stack during qq execution
 
-    thresh = 1e-10 # threshold for deleting tiny amplitudes
+    thresh = 1e-10 # threshold for deleting tiny amplitudes.
+    print_prob_digs = 5 # print probabilities/amplitudes to this precision
+    print_expr_digs  = 5 # print values of expressions to this precision
 
     ################################################ Code regions
 

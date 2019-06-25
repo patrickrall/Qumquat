@@ -6,6 +6,8 @@ import cmath, copy
 #  - oper
 #  - phase
 
+# low priority TODO: can these be simplified using new prune function?
+
 class Primitive:
     ######################################## Hadamard
 

@@ -3,15 +3,11 @@ import math, copy
 
 class Init:
 
-    ############################ Initialization
+    ############################ Base routines
 
-    # takes a register in the |0> state and initializes it to the desired value
     def init(self, key, val):
         if self.queue_action('init', key, val): return
         self.assert_mutable(key)
-
-        for branch in self.controlled_branches():
-            if branch[key.index()] != 0: raise ValueError("Register already initialized!")
 
         # cast ranges to superpositions, permitting qq.reg(range(3))
         if isinstance(val, range): val = list(val)
@@ -19,58 +15,11 @@ class Init:
         if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
 
         if isinstance(val, Expression):
-            if val.float: raise TypeError("Quantum registers can only contain ints")
-            for branch in self.controlled_branches():
-                branch[key.index()] = es_int(val.c(branch))
-
+            self.init_expression(key,val)
         elif isinstance(val, list):
-            # uniform superposition over elements in list
-
-            # check list for validity
-            for i in range(len(val)):
-                if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
-                    raise TypeError("Superpositions only support integer literals.")
-                if val.index(val[i]) != i:
-                    raise ValueError("Superpositions can't contain repeated values.")
-
-            newbranches = []
-            goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
-            for branch in self.branches:
-                if goodbranch(branch):
-                    for x in val:
-                        newbranch = copy.copy(branch)
-                        newbranch[key.index()] = es_int(x)
-                        newbranch["amp"] /= math.sqrt(len(val))
-                        newbranches.append(newbranch)
-                else:
-                    newbranches.append(branch)
-
-            self.branches = newbranches
+            self.init_list(key,val)
         elif isinstance(val, dict):
-            # check if dictionary has integer keys, cast values to expressions
-            for k in val.keys():
-                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
-                val[k] = Expression(val[k], qq=self)
-
-            newbranches = []
-            goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
-            for branch in self.branches:
-                if goodbranch(branch):
-
-                    norm = 0
-                    for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
-                    if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
-
-                    for k in val.keys():
-                        newbranch = copy.copy(branch)
-                        newbranch[key.index()] = es_int(k)
-                        newbranch["amp"] *= float(val[k].c(branch))/math.sqrt(norm)
-                        if (abs(newbranch["amp"]) != 0):
-                            newbranches.append(newbranch)
-                else:
-                    newbranches.append(branch)
-
-            self.branches = newbranches
+            self.init_dict(key,val)
         else:
             raise TypeError("Invalid initialization of register with type ", type(val))
 
@@ -84,143 +33,207 @@ class Init:
         if isinstance(val, Key): val = Expression(val)
         if isinstance(val, int) or isinstance(val, es_int): val = Expression(val, self)
 
-        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
         if isinstance(val, Expression):
-            for branch in self.branches:
-                if goodbranch(branch): target = val.c(branch)
-                else: target = 0
-
-                if branch[key.index()] != target:
-                    raise ValueError("Failed to uncompute: not all branches matched specified value.\n\
-                            (Expected "+str(target)+" but found branch with "+str(branch[key.index()])+")")
-                    branch[key.index()] = es_int(0)
-
+            self.init_expression(key,val,invert=True)
         elif isinstance(val, list):
-            # uniform superposition
-
-            # check valid
-            for i in range(len(val)):
-                if not (isinstance(val[i], int) or isinstance(val[i], es_int)):
-                    raise TypeError("Superpositions only support non-superposed integers.")
-                if val.index(val[i]) != i:
-                    raise TypeError("Superpositions can't contain repeated values.")
-
-
-            # populate newbranches with branches matching first list item
-            untouchedbranches = []
-            newbranches = []
-            for branch in self.branches:
-                if goodbranch(branch):
-                    if branch[key.index()] != val[0]: continue
-
-                    b = copy.copy(branch)
-                    b[key.index()] = 0
-                    newbranches.append(b)
-                else:
-                    untouchedbranches.append(branch)
-
-            if len(self.branches) != len(newbranches)*len(val) + len(untouchedbranches):
-                raise ValueError("Failed to clean superposition.")
-
-            # check if other list items match up
-            for i in range(1,len(val)):
-                found = [] # list of indices in newbranches, where partners were found in branches
-                for branch in self.branches:
-                    if not goodbranch(branch): continue
-                    if branch[key.index()] != val[i]: continue
-
-                    matched = False
-                    for j in range(len(newbranches)):
-                        if j in found: continue
-
-                        good = True
-                        for k in newbranches[j].keys():
-                            if k == key.index(): continue
-                            if k == "amp":
-                                if abs(newbranches[j][k] - branch[k]) > 1e-10:
-                                    good = False
-                                    break
-                            elif newbranches[j][k] != branch[k]:
-                                good = False
-                                break
-
-                        if good:
-                            found.append(j)
-                            matched = True
-                            break
-
-                    if not matched:
-                        raise ValueError("Failed to clean superposition.")
-                if len(found) < len(newbranches):
-                    raise ValueError("Failed to clean superposition.")
-
-            self.branches = newbranches
-            for branch in self.branches:
-                branch["amp"] *= math.sqrt(len(val))
-            self.branches += untouchedbranches
-
+            self.init_list(key,val,invert=True)
         elif isinstance(val, dict):
-            # check if dictionary has integer keys, and get norm
-            for k in val.keys():
-                if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
-                val[k] = Expression(val[k], qq=self)
-
-            keys = list(val.keys())
-
-            # check if branches are equal except for key.index()
-            def branchesEqual(b1, b2):
-                for idx in self.branches[b1].keys():
-                    if idx == "amp": continue
-                    if idx == key.index(): continue
-                    if self.branches[b1][idx] != self.branches[b2][idx]:
-                        return False
-                return True
-
-            untouchedbranches = []
-            newbranches = []
-
-            checkbranches = [] # list of branch indexes unique up to key.index()
-            checkamplitudes = [] # factored amplitudes
-
-            for b in range(len(self.branches)):
-                branch = self.branches[b]
-                if goodbranch(branch):
-                    # if separable then branch should have this amplitude
-                    amp = branch["amp"]
-                    dict_amp = complex(val[int(branch[key.index()])].c(branch))
-                    if dict_amp == 0:
-                        raise ValueError("Failed to clean QRAM.")
-                    amp /= dict_amp
-                    norm = 0
-                    for k in val.keys(): norm += abs(float(val[k].c(branch)))**2
-                    if abs(norm) < self.thresh: raise ValueError("State from dictionary has norm 0.")
-                    amp *= math.sqrt(norm)
-
-                    found = False
-                    i = 0
-                    while i < len(checkbranches):
-                        if branchesEqual(b, checkbranches[i]):
-                            if abs(checkamplitudes[i] - amp) > 1e-10:
-                                raise ValueError("Failed to clean QRAM.")
-                            found = True
-                            break
-                        i += 1
-
-                    if not found:
-                        checkbranches.append(b)
-                        checkamplitudes.append(amp)
-
-                        newb = copy.copy(branch)
-                        newb[key.index()] = es_int(0)
-                        newb["amp"] = amp
-                        newbranches.append(newb)
-                else:
-                    untouchedbranches.append(branch)
-
-
-            self.branches = newbranches
-            self.branches += untouchedbranches
+            self.init_dict(key,val,invert=True)
         else:
             raise TypeError("Invalid un-initialization of register with type ", type(val))
 
+    ############################ Expression
+
+    def init_expression(self,key,expr, invert=False):
+        if expr.float: raise TypeError("Quantum registers can only contain ints")
+        if key.key in expr.keys: raise SyntaxError("Can't initialize register based on itself.")
+
+        # strategy:
+        # for each value of expr, create a list [0,expr,other,initial,vals]
+        # then the unitary simply shifts forward by one
+
+        H = set([b[key.index()] for b in self.controlled_branches()]) - set([es_int(0)])
+
+        for b in self.controlled_branches():
+            v = es_int(expr.c(b))
+            if v != es_int(0): # if already zero do nothing
+
+                thisH = [es_int(0),v] + sorted(list(H - set([v])))
+
+                idx = thisH.index(b[key.index()])
+                if not invert:
+                    b[key.index()] = thisH[(idx + 1) % len(thisH)]
+                else:
+                    b[key.index()] = thisH[(len(thisH) + idx - 1) % len(thisH)]
+
+
+    ############################ List
+
+    def init_list(self,key,ls, invert=False):
+        # check list for validity, cast to es_int
+        for i in range(len(ls)):
+            if not (isinstance(ls[i], int) or isinstance(ls[i], es_int)):
+                raise TypeError("Superpositions only support integer literals.")
+            if ls.index(ls[i]) != i:
+                raise ValueError("Superpositions can't contain repeated values.")
+            if isinstance(ls[i], int):
+                ls[i] = es_int(ls[i])
+
+        p = 1/math.sqrt(len(ls))
+        H = (set([b[key.index()] for b in self.controlled_branches()]) | set(ls)) - set([es_int(0)])
+        H = [es_int(0)] + list(H)
+
+        U = [{h:complex(p if (h in ls) else 0) for h in H}] # first column of U
+
+        # complete the rest of the matrix via graham schmidt
+        for i in H[1:]+H[:1]: # this way its closer to the identity
+            newcol = {h:complex(1 if (h == i) else 0) for h in H}
+            for col in U:
+                inner = sum([col[h].conjugate()*newcol[h] for h in H])
+                for h in H: newcol[h] -= col[h]*inner
+
+            # normalize
+            norm = math.sqrt(sum([abs(newcol[h])**2 for h in H]))
+            if norm < self.thresh: continue
+            for h in H: newcol[h] /= norm
+            U.append(newcol)
+
+        if len(U) != len(H): raise ValueError("Error in matrix completion. (This can happen when amplitudes get too small.)")
+
+        if invert:
+            newU = []
+            for i in H:
+                newU.append({h:(U[H.index(h)][i].conjugate()) for h in H})
+
+            U = newU
+
+        newbranches = []
+
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        for b in self.branches:
+            if not goodbranch(b):
+                newbranches.append(b)
+                continue
+
+            row = U[H.index(b[key.index()])]
+            for h in H:
+                if abs(row[h]) != 0:
+                    newbranch = copy.copy(b)
+                    newbranch[key.index()] = h
+                    newbranch["amp"] *= row[h]
+                    newbranches.append(newbranch)
+
+        self.branches = newbranches
+        self.prune()
+
+
+
+    ############################ Dictionary
+
+    def init_dict(self,key,dic,invert=False):
+        # check if dictionary has integer keys, cast to es_int
+        newdic = {}
+        keys = set([])
+        for k in dic.keys():
+            if not isinstance(k, int): raise TypeError("QRAM keys must be integers.")
+            newdic[es_int(k)] = Expression(dic[k], qq=self)
+            keys |= newdic[es_int(k)].keys
+        dic = newdic
+
+        if key.key in keys: raise SyntaxError("Can't initialize register based on itself.")
+
+        keys = [Key(self,val=k) for k in keys]
+
+        ############## sort branches into groups with equal value
+
+        def branchesEqual(b1, b2):
+            for k in keys:
+                if self.branches[b1][k.index()] != self.branches[b2][k.index()]:
+                    return False
+            return True
+
+        branch_type_counter = 0
+        branchtypes = {}
+
+        goodbranch = lambda b: all([ctrl.c(b) != 0 for ctrl in self.controls])
+        for i in range(len(self.branches)):
+            b = self.branches[i]
+            if not goodbranch(b): continue
+
+            found = False
+            for j in branchtypes:
+                if branchesEqual(branchtypes[j][0], i):
+                    found = True
+                    break
+                    branchtypes[j].append(i)
+
+            if not found:
+                branchtypes[branch_type_counter] = [i]
+                branch_type_counter += 1
+                continue
+
+        ############ determine unitary for each group
+
+        H = set([b[key.index()] for b in self.controlled_branches()])
+        H = (H | set(dic.keys())) - set([es_int(0)])
+        H = [es_int(0)] + list(H)
+
+        unitaries = []
+
+        for j in range(branch_type_counter):
+            norm = 0
+            for k in dic.keys(): norm += abs( dic[k].c(self.branches[branchtypes[j][0]]) )**2
+            norm = math.sqrt(norm)
+
+            U = [{h:(dic[h].c(self.branches[branchtypes[j][0]])/norm\
+                    if h in dic.keys() else complex(0)) for h in H}]
+
+            # complete the rest of the matrix via graham schmidt
+            for i in H[1:]+H[:1]: # this way its closer to the identity
+                newcol = {h:complex(1 if (h == i) else 0) for h in H}
+                for col in U:
+                    inner = sum([col[h].conjugate()*newcol[h] for h in H])
+                    for h in H: newcol[h] -= col[h]*inner
+
+                # normalize
+                norm = math.sqrt(sum([abs(newcol[h])**2 for h in H]))
+                if norm < self.thresh: continue
+                for h in H: newcol[h] /= norm
+                U.append(newcol)
+
+
+            if len(U) != len(H): raise ValueError("Error in matrix completion. (This can happen when amplitudes get too small.)")
+
+            if invert:
+                newU = []
+                for i in H:
+                    newU.append({h:(U[H.index(h)][i].conjugate()) for h in H})
+
+                unitaries.append(newU)
+            else:
+                unitaries.append(U)
+
+        ########### apply unitary
+
+        newbranches = []
+        for i in range(len(self.branches)):
+            b = self.branches[i]
+            if not goodbranch(b):
+                newbranches.append(b)
+                continue
+
+            for j in range(branch_type_counter):
+                if i in branchtypes[j]: break
+
+            U = unitaries[j]
+            row = U[H.index(b[key.index()])]
+            for h in H:
+                if abs(row[h]) != 0:
+                    newbranch = copy.copy(b)
+                    newbranch[key.index()] = h
+                    newbranch["amp"] *= row[h]
+                    newbranches.append(newbranch)
+
+        self.branches = newbranches
+        self.prune()
 

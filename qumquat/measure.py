@@ -22,7 +22,7 @@ class Measure:
         def dofloat(ex):
             if isinstance(ex, str):
                 return ex
-            else: return round(float(ex), 10)
+            else: return round(float(ex), self.print_expr_digs)
 
         exprs = [cast(expr) for expr in exprs]
 
@@ -115,7 +115,7 @@ class Measure:
             if isinstance(values[i], tuple):
                 st = " ".join([str(x) for x in list(values[i])])
             else: st = str(values[i])
-            s.append(st + " w.p. " + str(round(probs[i],5)))
+            s.append(st + " w.p. " + str(round(probs[i],self.print_prob_digs)))
         print("\n".join(s))
 
     def print_inv(self, *exprs):
@@ -139,7 +139,7 @@ class Measure:
         def dofloat(ex):
             if isinstance(ex, str):
                 return ex
-            else: return round(float(ex), 10)
+            else: return round(float(ex), self.print_expr_digs)
 
         for i in range(len(self.branches)):
             branch = self.branches[i]
@@ -161,12 +161,12 @@ class Measure:
 
         def show_amp(a):
             r,phi = cmath.polar(a)
-            r = round(r,5)
+            r = round(r,self.print_prob_digs)
             if phi == 0:
                 return str(r)
 
-            rounded = round(phi/cmath.pi,10)
-            if round(rounded,5) == rounded:
+            rounded = round(phi/cmath.pi,self.print_prob_digs*2)
+            if round(rounded,self.print_prob_digs) == rounded:
                 if int(rounded) in [-1, 1]:
                     return "-"+str(r)
                 elif rounded == 0.5:

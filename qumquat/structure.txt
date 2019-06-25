@@ -1,0 +1,25 @@
+Todo:
+    - better tests
+    - better docs
+
+
+Additional library:
+ - Hamiltonian simulation via LCU
+ - Sparse hamiltonian simulation via graph theory
+ - Sum of local terms via Trotter
+ - Qubitization?
+
+Additional library:
+ - Jordan Wigner transformation
+ - Bravyi Kitaev transformation
+http://michaelnielsen.org/blog/archive/notes/fermions_and_jordan_wigner.pdf
+
+Docs todo:
+- Swap test?
+- Basic Grover's, amplitude amplification, the new perp feature
+- Other applications of grover: median finding, graph connectivity, minimization, types of mean estimation, dynamic programming, etc? Good exercises?
+- phase estimation, approximate counting, estimating energies of hamiltonians
+- Shor's algorithm, primarily to test how conven ient the garbage collector is to use
+- More of Farhi's QML algorithms
+- A demo of the snapshot feature, maybe applied to 1511.02306 to show the accuracy improvement
+- Any of Matthew Hastings' many heuristic quantum algorithms for solving constraint satisfaction problems, e.g. last week's 1904.13339
