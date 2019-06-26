@@ -29,15 +29,15 @@ class Snapshots:
             idxs.append(reg.index())
 
         def branchesEqualNonIdxs(b1, b2):
-            for key in self.qq.branches[b1].keys():
+            for key in self.branches[b1].keys():
                 if key == "amp": continue
                 if key in idxs: continue
-                if self.qq.branches[b1][key] != self.qq.branches[b2][key]: return False
+                if self.branches[b1][key] != self.branches[b2][key]: return False
             return True
 
         def branchesEqualIdxs(b1, b2):
             for idx in idxs:
-                if self.qq.branches[b1][idx] != self.qq.branches[b2][idx]:
+                if self.branches[b1][idx] != self.branches[b2][idx]:
                     return False
             return True
 
@@ -46,7 +46,7 @@ class Snapshots:
         # each list element has the same value for non-idxs
 
         to_save = [[]]
-        for branch in range(len(self.qq.branches)):
+        for branch in range(len(self.branches)):
             i = 0
             while i < len(to_save):
                 found = False
@@ -77,8 +77,8 @@ class Snapshots:
             for j in range(len(to_save[i])):
                 for k in range(len(to_save[i])):
                     key1, key2 = [], []
-                    for idx in idxs: key1.append(str(self.qq.branches[to_save[i][j]][idx]))
-                    for idx in idxs: key2.append(str(self.qq.branches[to_save[i][k]][idx]))
+                    for idx in idxs: key1.append(str(self.branches[to_save[i][j]][idx]))
+                    for idx in idxs: key2.append(str(self.branches[to_save[i][k]][idx]))
                     key1, key2 = " ".join(key1), " ".join(key2)
 
                     if key1 not in keys: keys.append(key1)
@@ -86,8 +86,8 @@ class Snapshots:
 
                     key = key1 + "x" + key2
 
-                    val = self.qq.branches[to_save[i][j]]["amp"] * \
-                            self.qq.branches[to_save[i][k]]["amp"].conjugate()
+                    val = self.branches[to_save[i][j]]["amp"] * \
+                            self.branches[to_save[i][k]]["amp"].conjugate()
 
                     if key in rho: rho[key] += val
                     else: rho[key] = val
