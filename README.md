@@ -383,7 +383,7 @@ x = qq.reg(0)
 
 with qq.inv(): x.init([0,1])
 # if x was in the plus state, it is now in the 0 state.
-p = qq.reg(x == 0)
+p = qq.reg(x != 0)
 x.init([0,1])
 
 # now `p == 0` when `x` is in the plus state, `1` otherwise.
