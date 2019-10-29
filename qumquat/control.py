@@ -27,9 +27,11 @@ class Control:
         expr = Expression(expr, self)
         class WrapIf():
             def __enter__(s):
+                self.push_mode("control")
                 self.do_control(expr)
 
             def __exit__(s, *args):
+                self.pop_mode("control")
                 self.do_control_inv(expr)
 
         return WrapIf()

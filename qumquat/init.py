@@ -144,6 +144,7 @@ class Init:
 
         keys = [Key(self,val=k) for k in keys]
 
+
         ############## sort branches into groups with equal value
 
         def branchesEqual(b1, b2):
@@ -164,13 +165,14 @@ class Init:
             for j in branchtypes:
                 if branchesEqual(branchtypes[j][0], i):
                     found = True
-                    break
                     branchtypes[j].append(i)
+                    break
 
             if not found:
                 branchtypes[branch_type_counter] = [i]
                 branch_type_counter += 1
                 continue
+
 
         ############ determine unitary for each group
 

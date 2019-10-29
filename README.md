@@ -213,7 +213,30 @@ x.assign(1) # raises AttributeError
 x.clean(0) # raises AttributeError
 ```
 
-Expressions are also immute to quantum control flow, like `qq.control` and `qq.inv`. Other than this particular pitfall, expressions should behave intuitively.
+Expressions are also immune to quantum control flow, like `qq.control` and `qq.inv`. One final caveat is that the python operators `and` `or` and `not` cannot be overridden and behave unexpectedly with expressions. Use `&`, `|` and `== 0` respectively.
+
+```python
+x = qq.reg([0,1])
+y = qq.reg([0,1])
+
+qq.print(x,y,x and y, x & y)
+# 0.0 0.0 0.0 0.0 w.p. 0.25
+# 0.0 1.0 1.0 0.0 w.p. 0.25
+# 1.0 0.0 0.0 0.0 w.p. 0.25
+# 1.0 1.0 1.0 1.0 w.p. 0.25
+
+qq.print(x,y,x or y, x | y)
+# 0.0 0.0 0.0 0.0 w.p. 0.25
+# 0.0 1.0 0.0 1.0 w.p. 0.25
+# 1.0 0.0 1.0 1.0 w.p. 0.25
+# 1.0 1.0 1.0 1.0 w.p. 0.25
+
+qq.print(x, not x, x == 0)
+0.0 0.0 1.0 w.p. 0.5
+1.0 0.0 0.0 w.p. 0.5
+```
+
+Python is a flexible language that admits the embedding of complicated sub-languages like this one, but it is not perfect. These issues stem from the fact that certain python statements and expressions cannot be overridden. Beyond these issues however, Qumquat expressions should behave intuitively.
 
 ## Quantum Primitives
 
@@ -256,6 +279,18 @@ plt.bar(*qq.dist(x % y))
 plt.show()
 ```
 
+The function `qq.postselect(expr)` is almost more useful than `qq.measure` since it behaves deterministically and returns the success probabilty.
+
+```python
+x = qq.reg([0,1])
+
+prob = qq.postselect(x == 0)
+# prob is 0.5, x is now 0
+
+qq.postselect(x == 1)
+# Raises ValueError: Postselection failed!
+```
+
 ### Phase
 
 The `qq.phase(theta)` method allows you to multiply the amplitude `e^(i*theta)`. To make this phase non-global `theta` should be an expression  or a register (or you are using a quantum if statement). For your convenience there are `qq.phase_pi(expr)` for `e^(i*pi*expr)` and `qq.phase_2pi(expr)` for `e^(2*pi*i*expr)`.
@@ -263,7 +298,7 @@ The `qq.phase(theta)` method allows you to multiply the amplitude `e^(i*theta)`.
 ```python
 x = qq.reg(range(3))
 
-qq.phase(1) # this applies an unmeasurable global phase
+qq.phase(1) # this applies an unmeasurable global phase of 1 radian
 
 from math import pi
 # these all do the same thing
@@ -275,6 +310,7 @@ qq.phase_2pi(x)
 ### Quantum Fourier Transform
 
 You can apply a QFT to a register `x` with `x.qft(d)`. Let `x = k*d + r`, where `r = x%d`. Then the QFT takes `|x>` to ` d^(-1/2)  sum_y e^(r * y * 2*pi*i/d) |k*d + y>`, where the sum is from `0` to `d-1`. It leaves the `k*d` part intact and only transforms `r`. 
+
 ```python
 x = qq.reg(-4)
 x.qft(4)
@@ -337,25 +373,26 @@ x.had(0)
 x.cnot(0,1)
 
 # Do this instead:
-y = qq.reg([0,3])
+y1 = qq.reg([0,1])
+y2 = qq.reg(y1)
 ```
 
 Qumquat actually implements a custom class `es_int` - explicitly signed int - for the registers. `es_int` behaves like a regular: python int, but `+0` and `-0` are different numbers, i.e `es_int(0) == -es_int(0)` evaluates to `False`. This is necessary because it should be possible to hadamard the sign bit regardless of the value of the rest of the register. However, this is just a technicality. The user should never have to care, especially since `qq.measure` casts to a float.
 
 ### QRAM
 
-Given a dictionary whose keys are integers and values are either floats or integers, an expression can be used as a key to the dictionary via `expr.qram(dict)`.
+Given a dictionary whose keys are integers and values are either floats or integers, an expression can be used as a key to the dictionary via `qq.qram(dict,key)`.
 
 ```python
 dic = {0:0.2, 1:0.4}
 x = qq.reg([-1,1])
 expr = (x+1)//2
-qq.print(expr,expr.qram(dic))
+qq.print(expr,qq.qram(dic,expr))
 # 0.0, 0.2 w.p. 0.5
 # 1.0, 0.4 w.p. 0.5
 
 # QRAM queries also work on lists
-qq.print(expr,expr.qram([12.2, 42.1])
+qq.print(expr,qq.qram([12.2, 42.1],expr)
 # 0.0, 12.2 w.p. 0.5
 # 1.0, 42.1 w.p. 0.5
 ```
@@ -376,7 +413,7 @@ Since `x.init` behaves unpredictably on states other than the `0` state, it shou
 
 ### Perp
 
-A common situation where `x.init` is used is the flip a bit whenever a register is orthogonal to a target state.
+A common situation where `x.init` is used is to flip a bit whenever a register is orthogonal to a target state.
 
 ```python
 x = qq.reg(0)
@@ -400,16 +437,20 @@ with x.perp([0,1]) as p:
 
 ### Application: Measure state
 
-A common application of `x.perp` is to measure in a basis containing a target state. For example, say we prepared `x` to be close to a target state and we want to test how close to the target we are. Then the probability returned by `qq.postselect` could be usedas follows:
+A common application of `x.perp` is to measure in a basis containing a target state. For example, say we prepared `x` to be close-ish to a target state and we want to test how close to the target we are. Then the probability returned by `qq.postselect` could be used as follows:
 
 ```python
 x = qq.reg(0)
 target = [0,1]
+
 # do something, e.g. amplitude amplification, to approximately turn x into target
+
 with x.perp(target) as p:
     prob = qq.postselect(p == 0)
+
 # x is now target, prob now contains magnitude square of overlap.
 ```
+
 ### Application: Grover's search
 
 Another application of `x.perp` is amplitude amplification or Grover's search. While we usually do not have access to a unitary that prepares the target state (otherwise, why use amplitude amplifaction at all?) we need a utility to reflect around the initial state. 
@@ -501,7 +542,7 @@ Normally reversible statements `+=`, `-=`, `*=`, `//=`, `**=`, `^=`, `<<=` still
 
 ## Snapshots
 
-We often want to compare quantum states. Above we used `x.perp` to measure the inner product of a register and target state. If we want to measure the inner product between two pure states in two registers, we could use the swap test. The helper function `qq.swap` makes this trivial.  
+We often want to compare quantum states. Above we used `x.perp` to measure the inner product of a register and a known target state. If we want to measure the inner product between two unknown pure states in two registers, we could use the swap test. The helper function `qq.swap` makes this trivial.  
 
 ```python
 # registers to compare
@@ -537,13 +578,18 @@ print("Fidelity:", qq.fidelity(snap1,snap2))
 print("Trace distance:", qq.trace_dist(snap1,snap2))
 
 qq.clear()
-# qq.snap also supports expressions and multiple expressions
+```
 
+`qq.snap` can also compare several registers at once. It does not support expressions.
+
+```python
 x = qq.reg([0,1])
-y = qq.reg([2,3])
+y = qq.reg(x)
+z = qq.reg([0,1])
 
-snap1 = qq.snap(x+1, y)
-snap2 = qq.snap(y-1, x)
+snap1 = qq.snap(x, y) # bell state
+snap2 = qq.snap(z, z) # acts like bell state
+
 print("Fidelity:", qq.fidelity(snap1,snap2))
 print("Trace distance:", qq.trace_dist(snap1,snap2))
 ```

@@ -63,6 +63,9 @@ class Measure:
         if len(self.mode_stack) > 0:
             raise SyntaxError("Can only measure at top-level.")
 
+        # still need to queue since measuring is allowed inside garbage collected environment
+        if self.queue_action('measure', *var): return
+
         values, probs, configs = self.dist(*var, branches=True)
 
         # pick outcome
@@ -85,6 +88,8 @@ class Measure:
     def postselect(self, expr):
         if len(self.mode_stack) > 0:
             raise SyntaxError("Can only measure at top-level.")
+
+        if self.queue_action('postselect', expr): return
 
         expr = Expression(expr, self)
 
